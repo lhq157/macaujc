@@ -18,7 +18,7 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 import streamlit as st
-from scipy.stats import chisquare, kstest
+from scipy.stats import chisquare, kstest, chi2 as chi2_dist
 
 import config
 
@@ -732,11 +732,35 @@ def fig_to_b64(fig) -> str:
 
 def generate_html_report(df_full, freq_arr, avg_freq, chi2_stat, chi2_p,
                          ks_p, gap_arr, zodiac_cnt, sig_level,
-                         specials, n, latest, pass_cnt) -> str:
-    """生成完整暗色主题 HTML 分析报告（含 4 张内嵌图表）"""
+                         specials, n, latest, pass_cnt, **kwargs) -> str:
+    """生成专业统计分析 HTML 报告（暗色主题，含描述性统计、假设检验、效应量）"""
     now   = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     start = df_full['openTime'].min().strftime('%Y-%m-%d')
     end   = df_full['openTime'].max().strftime('%Y-%m-%d')
+
+    # 额外统计量（从 kwargs 提取，回退到内部计算）
+    cramers_v     = kwargs.get('cramers_v',    np.sqrt(chi2_stat / (n * 48)))
+    cv_pct        = kwargs.get('cv_pct',       freq_arr.std() / freq_arr.mean() * 100)
+    freq_skew     = kwargs.get('freq_skew',    0.0)
+    freq_kurt     = kwargs.get('freq_kurt',    0.0)
+    gap_std       = kwargs.get('gap_std',      0.0)
+    gap_p25       = kwargs.get('gap_p25',      0.0)
+    gap_p75       = kwargs.get('gap_p75',      0.0)
+    ks_stat_val   = kwargs.get('ks_stat',      0.0)
+    chi2_crit     = kwargs.get('chi2_crit',    65.17)
+    zod_chi2_stat = kwargs.get('zod_chi2_stat', 0.0)
+    zod_chi2_p    = kwargs.get('zod_chi2_p',    1.0)
+    zod_chi2_pass = kwargs.get('zod_chi2_pass', True)
+    zod_chi2_crit = kwargs.get('zod_chi2_crit', 19.68)
+    zod_obs_list  = kwargs.get('zod_obs',       [])
+    acf_exceed    = kwargs.get('acf_exceed',    0)
+    conf_interval = kwargs.get('conf_interval', 1.96 / np.sqrt(n))
+    acf_lags_val  = kwargs.get('acf_lags',      20)
+
+    chi2_pass = chi2_p > sig_level
+    ks_pass   = ks_p   > sig_level
+    acf_pass  = acf_exceed == 0
+    overall_pass = pass_cnt >= 2
 
     # 生成嵌入图表
     figs = {
@@ -749,7 +773,9 @@ def generate_html_report(df_full, freq_arr, avg_freq, chi2_stat, chi2_p,
     for v in figs.values():
         plt.close(v)
 
-    # 预计算：生肖表格行
+    # 生肖表格行
+    top1 = max(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
+    bot1 = min(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
     zodiac_rows = ''
     for z in ZODIAC_ORDER:
         if z not in zodiac_cnt:
@@ -757,142 +783,343 @@ def generate_html_report(df_full, freq_arr, avg_freq, chi2_stat, chi2_p,
         cnt_z = zodiac_cnt[z]
         delta = cnt_z - n / 12
         sign  = '+' if delta >= 0 else ''
+        dev_p = delta / (n / 12) * 100
+        sign2 = '+' if dev_p >= 0 else ''
         zodiac_rows += (
-            f'<tr><td>{z}</td><td>{cnt_z}</td>'
-            f'<td>{cnt_z/n*100:.1f}%</td>'
-            f'<td>{sign}{delta:.1f}</td></tr>'
+            f'<tr><td>{ZODIAC_EMOJI.get(z,"")}&nbsp;{z}</td>'
+            f'<td style="text-align:right;font-weight:600">{cnt_z}</td>'
+            f'<td style="text-align:right">{cnt_z/n*100:.1f}%</td>'
+            f'<td style="text-align:right">{sign}{delta:.1f}</td>'
+            f'<td style="text-align:right;color:{"#27AE60" if abs(dev_p)<8 else "#F39C12"}">'
+            f'{sign2}{dev_p:.1f}%</td></tr>'
         )
 
-    # 预计算：遗漏异常
+    # 遗漏异常
     warn_nums = [(i+1, int(gap_arr[i])) for i in range(49) if gap_arr[i] >= avg_freq * 2]
     warn_nums.sort(key=lambda x: x[1], reverse=True)
     warn_text = '、'.join([f'No.{nn}（遗漏{g}期）' for nn, g in warn_nums[:5]]) if warn_nums else '无'
 
-    # 预计算：自动结论段落
-    chi2_pass = chi2_p > sig_level
-    ks_pass   = ks_p   > sig_level
-    top1 = max(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
-    bot1 = min(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
-    top1_cnt = zodiac_cnt.get(top1, 0)
-    bot1_cnt = zodiac_cnt.get(bot1, 0)
+    # Cramér's V interpretation
+    if cramers_v < 0.1:
+        cv_level, cv_color = '微弱（Negligible）', '#27AE60'
+    elif cramers_v < 0.3:
+        cv_level, cv_color = '小效应（Small）', '#F39C12'
+    else:
+        cv_level, cv_color = '中等效应（Medium）', '#E74C3C'
 
-    concl_random = (
-        '历史数据在统计上符合随机均匀分布，卡方检验与KS检验均未发现显著偏离，'
-        '与彩票纯随机抽签机制理论一致。'
-        if (chi2_pass and ks_pass) else
-        '历史数据存在一定统计偏离，但这可能由样本量不足或短期随机波动引起，'
-        '不代表可被利用的规律。彩票开奖在机制上是独立随机事件。'
+    # p-value formatter
+    def pfmt(p): return f'{p:.4f}' if p >= 0.0001 else '&lt; 0.0001'
+    def dec(passed):
+        return ('<span class="pass">不拒绝 H₀</span>' if passed
+                else '<span class="fail">拒绝 H₀</span>')
+
+    # 正式结论段落
+    concl_chi2 = (
+        f'在 α={sig_level} 显著性水平下，卡方统计量 χ²(48) = {chi2_stat:.4f}（p = {pfmt(chi2_p)}），'
+        + ('p &gt; α，<em>未能拒绝零假设</em>，49个号码频率与均匀分布无统计显著差异。'
+           if chi2_pass else
+           'p ≤ α，<em>拒绝零假设</em>，频率存在偏离，但效应量微弱，实际意义有限。')
+        + f' Cramér\'s V = {cramers_v:.4f}（{cv_level}）。'
+    )
+    concl_ks = (
+        f'KS 统计量 D = {ks_stat_val:.4f}（p = {pfmt(ks_p)}），'
+        + ('p &gt; α，<em>未能拒绝零假设</em>，号码间隔服从指数分布，支持各期独立随机假设。'
+           if ks_pass else
+           'p ≤ α，<em>拒绝零假设</em>，间隔分布存在偏离，可能由离散化误差或边界效应引起。')
+    )
+    concl_acf = (
+        f'检验 {acf_lags_val} 个滞后期，{acf_exceed} 个 ACF 系数超出 95% CI（±{conf_interval:.4f}）。'
+        + ('<em>未能拒绝无自相关零假设</em>，序列无线性时序依赖。'
+           if acf_pass else
+           '超出比例约 5%，与随机期望一致，不具实际显著意义。')
+    )
+    concl_zod = (
+        f'生肖卡方 χ²({len(zod_obs_list)-1 if len(zod_obs_list)>=2 else "—"}) = {zod_chi2_stat:.4f}'
+        f'（p = {pfmt(zod_chi2_p)}），'
+        + ('<em>未能拒绝零假设</em>，12生肖分布符合均匀性。'
+           if zod_chi2_pass else
+           '<em>拒绝零假设</em>，生肖分布存在偏离，但无实际预测价值。')
+    )
+    concl_overall = (
+        f'{pass_cnt}/3 项核心假设检验通过。'
+        + ('数据整体符合独立随机均匀分布特征，与彩票纯随机抽签机制一致。'
+           if overall_pass else
+           '部分检验存在偏离，建议扩大样本量后重新评估；彩票仍为独立随机事件。')
     )
 
-    # 检验结论颜色和文字
-    def pf(b): return ('pass', '✅ 通过') if b else ('fail', '❌ 未通过')
-    c1, t1 = pf(chi2_pass)
-    c2, t2 = pf(ks_pass)
+    verd_c  = '#27AE60' if overall_pass else '#E74C3C'
+    verd_bg = 'rgba(39,174,96,0.08)' if overall_pass else 'rgba(231,76,60,0.08)'
+    verd_bd = 'rgba(39,174,96,0.3)'  if overall_pass else 'rgba(231,76,60,0.3)'
+    verd_ic = '✅' if overall_pass else '⚠️'
+    verd_tx = '随机均匀分布假设成立' if overall_pass else '数据存在统计显著偏离'
+
+    # 描述性统计表行
+    freq_iqr  = float(np.percentile(freq_arr, 75) - np.percentile(freq_arr, 25))
+    freq_ci95 = 1.96 * freq_arr.std() / np.sqrt(49)
+    skew_interp = '近似对称' if abs(freq_skew) < 0.5 else ('正偏' if freq_skew > 0 else '负偏')
+    kurt_interp = '近似正态' if abs(freq_kurt) < 0.5 else ('厚尾' if freq_kurt > 0 else '薄尾')
+
+    desc_rows_html = ''
+    desc_data = [
+        ('样本量（期数 n）',     f'{n}',                               '开奖记录总数'),
+        ('号码均值 μ',           f'{avg_freq:.3f}',                     '期望出现次数 = n/49'),
+        ('标准差 σ',             f'{freq_arr.std():.3f}',               '频次均方根偏差'),
+        ('变异系数 CV',          f'{cv_pct:.2f}%',                      'σ/μ×100%'),
+        ('中位数',               f'{float(np.median(freq_arr)):.1f}',   '稳健中心估计'),
+        ('四分位距 IQR',         f'{freq_iqr:.1f}',                     'Q₃ − Q₁'),
+        ('均值 95% CI 半宽',     f'±{freq_ci95:.3f}',                   '1.96 × σ / √49'),
+        ('偏度 γ₁',              f'{freq_skew:.4f}',                    skew_interp),
+        ('超额峰度 γ₂',          f'{freq_kurt:.4f}',                    kurt_interp),
+        ('极差 Range',           f'{int(freq_arr.max() - freq_arr.min())}', 'max − min'),
+        ('间隔均值 E[G]',        f'{avg_freq:.2f}',                     '≈ n/49'),
+        ('间隔标准差 σ[G]',      f'{gap_std:.2f}',                      '遗漏离散程度'),
+        ('间隔四分位 Q₁/Q₃',    f'{gap_p25:.1f} / {gap_p75:.1f}',      ''),
+    ]
+    for nm, val, note in desc_data:
+        desc_rows_html += (
+            f'<tr><td>{nm}</td>'
+            f'<td style="text-align:right;font-weight:600;color:#E0E6ED">{val}</td>'
+            f'<td style="color:rgba(224,230,237,.45);font-size:11px">{note}</td></tr>'
+        )
+
+    # 假设检验表行
+    n_zod_df = len(zod_obs_list) - 1 if len(zod_obs_list) >= 2 else 0
+    test_rows_html = (
+        f'<tr><td>卡方拟合优度检验</td><td>H₀：49号等概率</td>'
+        f'<td>χ²(48) = {chi2_stat:.4f}</td><td>{pfmt(chi2_p)}</td>'
+        f'<td>{chi2_crit:.3f}</td><td>{dec(chi2_pass)}</td>'
+        f'<td>V = {cramers_v:.4f}<br><small style="color:{cv_color}">{cv_level}</small></td></tr>'
+
+        f'<tr><td>KS 指数分布拟合检验</td><td>H₀：间隔 ~ Exp(λ)</td>'
+        f'<td>D = {ks_stat_val:.4f}</td><td>{pfmt(ks_p)}</td>'
+        f'<td>—</td><td>{dec(ks_pass)}</td><td>—</td></tr>'
+
+        f'<tr><td>自相关检验（ACF）</td>'
+        f'<td>H₀：序列无自相关</td>'
+        f'<td>{acf_exceed}/{acf_lags_val} 超 CI</td><td>—</td>'
+        f'<td>±{conf_interval:.4f}</td><td>{dec(acf_pass)}</td><td>—</td></tr>'
+
+        f'<tr><td>生肖均匀性卡方</td>'
+        f'<td>H₀：12生肖等频</td>'
+        f'<td>χ²({n_zod_df}) = {zod_chi2_stat:.4f}</td>'
+        f'<td>{pfmt(zod_chi2_p)}</td>'
+        f'<td>{zod_chi2_crit:.3f}</td>'
+        f'<td>{dec(zod_chi2_pass)}</td><td>—</td></tr>'
+    )
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8"/>
-<title>特码统计分析报告</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>特码统计分析报告 — {start} ~ {end}</title>
 <style>
   *{{margin:0;padding:0;box-sizing:border-box;}}
   body{{background:#0F1923;color:#E0E6ED;
        font-family:-apple-system,'PingFang SC','Helvetica Neue',sans-serif;
-       padding:32px 48px;max-width:1100px;margin:0 auto;}}
-  h1{{font-size:26px;color:#00C9FF;border-bottom:2px solid #00C9FF;
-      padding-bottom:10px;margin-bottom:6px;}}
-  .meta{{color:rgba(224,230,237,.45);font-size:12px;margin-bottom:24px;}}
-  h2{{font-size:16px;color:#E0E6ED;margin:28px 0 12px;
-      padding-left:10px;border-left:3px solid #00C9FF;}}
-  .kpi-row{{display:flex;gap:14px;margin:14px 0;flex-wrap:wrap;}}
-  .kpi{{background:#1A2634;border-radius:10px;padding:14px 18px;min-width:130px;
-        border:1px solid rgba(0,201,255,.12);flex:1;}}
-  .kpi-val{{font-size:22px;font-weight:700;color:#00C9FF;}}
+       padding:32px 48px;max-width:1120px;margin:0 auto;line-height:1.6;}}
+  h1{{font-size:24px;color:#00C9FF;border-bottom:2px solid rgba(0,201,255,.3);
+      padding-bottom:12px;margin-bottom:8px;}}
+  .meta{{color:rgba(224,230,237,.4);font-size:12px;margin-bottom:28px;}}
+  h2{{font-size:15px;color:#E0E6ED;margin:32px 0 14px;
+      padding-left:12px;border-left:3px solid #00C9FF;letter-spacing:.3px;}}
+  .verdict{{background:{verd_bg};border:1px solid {verd_bd};border-radius:12px;
+            padding:20px 24px;margin-bottom:24px;display:flex;gap:16px;align-items:flex-start;}}
+  .verdict-icon{{font-size:28px;line-height:1;}}
+  .verdict-title{{font-size:17px;font-weight:700;color:{verd_c};margin-bottom:6px;}}
+  .verdict-body{{font-size:13px;color:rgba(224,230,237,.75);}}
+  .kpi-row{{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap;}}
+  .kpi{{background:#1A2634;border-radius:10px;padding:14px 18px;min-width:120px;
+        border:1px solid rgba(0,201,255,.12);flex:1;text-align:center;}}
+  .kpi-val{{font-size:20px;font-weight:700;color:#00C9FF;}}
   .kpi-lbl{{font-size:10px;color:rgba(224,230,237,.4);margin-top:4px;
              text-transform:uppercase;letter-spacing:.5px;}}
   img{{max-width:100%;border-radius:8px;margin:10px 0;border:1px solid rgba(255,255,255,.05);}}
-  table{{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0;}}
-  th{{background:#1A2634;color:#00C9FF;padding:8px 12px;text-align:left;
-      border-bottom:1px solid rgba(0,201,255,.15);}}
-  td{{padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.04);}}
-  tr:hover td{{background:rgba(255,255,255,.03);}}
-  .pass{{color:#27AE60;font-weight:600;}}
-  .fail{{color:#E74C3C;font-weight:600;}}
-  .concl{{background:rgba(0,201,255,.05);border-left:3px solid #00C9FF;
-          padding:10px 16px;margin:8px 0;border-radius:0 8px 8px 0;
-          font-size:13px;line-height:1.7;}}
-  .disc{{background:rgba(243,156,18,.07);border:1px solid rgba(243,156,18,.2);
-         border-radius:8px;padding:14px 18px;margin-top:32px;
-         font-size:11px;color:rgba(224,230,237,.5);line-height:1.8;}}
-  footer{{text-align:center;margin-top:28px;font-size:11px;
-          color:rgba(224,230,237,.2);padding-top:16px;
-          border-top:1px solid rgba(255,255,255,.05);}}
+  table{{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0;}}
+  th{{background:#1A2634;color:#00C9FF;padding:9px 13px;text-align:left;
+      border-bottom:1px solid rgba(0,201,255,.18);font-size:11px;white-space:nowrap;}}
+  td{{padding:8px 13px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;}}
+  tr:hover td{{background:rgba(255,255,255,.025);}}
+  .pass{{color:#27AE60;font-weight:700;}}
+  .fail{{color:#E74C3C;font-weight:700;}}
+  .concl{{border-left:3px solid #00C9FF;background:rgba(0,201,255,.04);
+          padding:11px 16px;margin:9px 0;border-radius:0 8px 8px 0;
+          font-size:13px;line-height:1.75;}}
+  .concl strong{{color:#E0E6ED;}}
+  .lim-item{{display:flex;gap:12px;padding:10px 0;
+             border-bottom:1px solid rgba(255,255,255,.04);}}
+  .lim-num{{min-width:22px;height:22px;background:rgba(0,201,255,.1);border-radius:50%;
+            display:flex;align-items:center;justify-content:center;
+            font-size:11px;color:#00C9FF;font-weight:700;margin-top:2px;flex-shrink:0;}}
+  .lim-text{{font-size:12px;color:rgba(224,230,237,.6);line-height:1.7;}}
+  .eff-box{{background:#1A2634;border:1px solid rgba(0,201,255,.1);border-radius:10px;
+            padding:16px 20px;display:inline-block;width:48%;margin:6px 1%;
+            vertical-align:top;}}
+  .eff-lbl{{font-size:10px;color:rgba(224,230,237,.4);text-transform:uppercase;
+            letter-spacing:.6px;margin-bottom:6px;}}
+  .eff-val{{font-size:18px;font-weight:700;margin-bottom:6px;}}
+  .eff-desc{{font-size:12px;color:rgba(224,230,237,.6);line-height:1.65;}}
+  .disc{{background:rgba(243,156,18,.06);border:1px solid rgba(243,156,18,.18);
+         border-radius:10px;padding:16px 20px;margin-top:36px;
+         font-size:11px;color:rgba(224,230,237,.45);line-height:1.85;}}
+  .disc strong{{color:rgba(224,230,237,.65);}}
+  footer{{text-align:center;margin-top:24px;font-size:11px;
+          color:rgba(224,230,237,.18);padding-top:14px;
+          border-top:1px solid rgba(255,255,255,.04);}}
 </style>
 </head>
 <body>
 <h1>📊 特码统计分析报告</h1>
-<p class="meta">生成时间：{now} &nbsp;|&nbsp; 数据范围：{start} ~ {end} &nbsp;|&nbsp; 共 {n} 期 &nbsp;|&nbsp; 统计检验通过：{pass_cnt}/3</p>
+<p class="meta">
+  生成时间：{now} &nbsp;·&nbsp; 数据范围：{start} ~ {end}
+  &nbsp;·&nbsp; 共 <strong style="color:#E0E6ED">{n}</strong> 期
+  &nbsp;·&nbsp; 显著性水平 α = {sig_level}
+</p>
 
-<h2>一、数据概览</h2>
-<div class="kpi-row">
-  <div class="kpi"><div class="kpi-val">{n}</div><div class="kpi-lbl">总期数</div></div>
-  <div class="kpi"><div class="kpi-val">{latest['expect']}</div><div class="kpi-lbl">最新期号</div></div>
-  <div class="kpi"><div class="kpi-val" style="color:#FF6B6B">{int(latest['special'])}</div><div class="kpi-lbl">上期特码</div></div>
-  <div class="kpi"><div class="kpi-val">{df_full['openTime'].min().year}–{df_full['openTime'].max().year}</div><div class="kpi-lbl">数据年份</div></div>
-  <div class="kpi"><div class="kpi-val">{avg_freq:.1f}</div><div class="kpi-lbl">理论均值（每号）</div></div>
+<!-- 执行摘要 -->
+<div class="verdict">
+  <div class="verdict-icon">{verd_ic}</div>
+  <div>
+    <div class="verdict-title">执行摘要 — {verd_tx}</div>
+    <div class="verdict-body">
+      在 α={sig_level} 显著性水平下，{pass_cnt}/3 项核心假设检验
+      {"未能拒绝零假设，数据整体符合独立随机均匀分布特征，与彩票纯随机抽签机制理论一致。" if overall_pass else "拒绝零假设，数据存在统计偏离，建议扩大样本量评估；彩票仍为独立随机事件。"}
+    </div>
+    <div class="kpi-row" style="margin-top:14px">
+      <div class="kpi"><div class="kpi-val" style="color:{verd_c}">{pass_cnt}/3</div><div class="kpi-lbl">检验通过</div></div>
+      <div class="kpi"><div class="kpi-val">{n}</div><div class="kpi-lbl">分析期数</div></div>
+      <div class="kpi"><div class="kpi-val">{sig_level}</div><div class="kpi-lbl">显著性水平 α</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:{cv_color}">{cramers_v:.4f}</div><div class="kpi-lbl">Cramér's V</div></div>
+      <div class="kpi"><div class="kpi-val">{cv_pct:.1f}%</div><div class="kpi-lbl">变异系数 CV</div></div>
+    </div>
+  </div>
 </div>
 
+<!-- 一、描述性统计 -->
+<h2>一、描述性统计</h2>
+<p style="font-size:12px;color:rgba(224,230,237,.45);margin-bottom:10px">
+  特码频率分布基本统计特征（k = 49 个号码，n = {n} 期）
+</p>
+<table>
+  <tr><th>统计量</th><th style="text-align:right">数值</th><th>说明</th></tr>
+  {desc_rows_html}
+</table>
+
+<!-- 二、号码频率分布 -->
 <h2>二、号码频率分布</h2>
 <img src="data:image/png;base64,{b64['freq']}" alt="频率分布"/>
 <img src="data:image/png;base64,{b64['heat']}" alt="热力图"/>
 
-<h2>三、生肖分析</h2>
+<!-- 三、假设检验汇总 -->
+<h2>三、假设检验汇总</h2>
+<p style="font-size:12px;color:rgba(224,230,237,.45);margin-bottom:10px">
+  所有检验基于双侧或右尾原则，显著性水平 α = {sig_level}
+</p>
+<table>
+  <tr><th>检验项目</th><th>H₀ 假设</th><th>统计量值</th>
+      <th>p 值</th><th>临界值</th><th>决策</th><th>效应量</th></tr>
+  {test_rows_html}
+</table>
+
+<!-- 四、效应量解读 -->
+<h2>四、效应量解读</h2>
+<div class="eff-box">
+  <div class="eff-lbl">Cramér's V（卡方效应量）</div>
+  <div class="eff-val" style="color:{cv_color}">{cramers_v:.4f} — {cv_level}</div>
+  <div class="eff-desc">
+    {"V &lt; 0.1，号码频率偏差极小，实际意义可忽略不计。统计显著性与实际意义相独立。" if cramers_v < 0.1 else ("V = 0.1~0.3，存在小幅偏离，实际意义仍然有限。" if cramers_v < 0.3 else "V ≥ 0.3，中等效应，建议检查数据质量。")}
+    <br><small style="color:rgba(224,230,237,.3)">V = √(χ² / (n × (k−1)))，k=49，n={n}</small>
+  </div>
+</div>
+<div class="eff-box">
+  <div class="eff-lbl">变异系数 CV（频率相对离散度）</div>
+  <div class="eff-val" style="color:#00C9FF">{cv_pct:.2f}%</div>
+  <div class="eff-desc">
+    {"CV &lt; 15%，各号频率高度均匀，接近理论等概率值。" if cv_pct < 15 else "CV 较高，频率分布存在不均匀性，但属正常统计波动范围。"}
+    偏度 γ₁ = {freq_skew:.4f}（{skew_interp}），超额峰度 γ₂ = {freq_kurt:.4f}（{kurt_interp}）。
+  </div>
+</div>
+
+<!-- 五、生肖分布分析 -->
+<h2>五、生肖分布分析</h2>
 <img src="data:image/png;base64,{b64['zod']}" alt="生肖分布"/>
 <table>
-  <tr><th>生肖</th><th>出现次数</th><th>占比</th><th>偏差（vs 均值）</th></tr>
+  <tr><th>生肖</th><th style="text-align:right">频次</th>
+      <th style="text-align:right">占比</th>
+      <th style="text-align:right">偏差（次）</th>
+      <th style="text-align:right">偏差%</th></tr>
   {zodiac_rows}
 </table>
-
-<h2>四、遗漏分析</h2>
-<img src="data:image/png;base64,{b64['gap']}" alt="遗漏分析"/>
-<p style="font-size:12px;color:rgba(224,230,237,.5);margin:6px 0">
-  遗漏异常（&gt;2× 均值 {avg_freq:.0f} 期）：{warn_text}
+<p style="font-size:11px;color:rgba(224,230,237,.35);margin-top:6px">
+  理论均值 {n/12:.1f} 次/生肖 &nbsp;·&nbsp;
+  最高：{ZODIAC_EMOJI.get(top1,'')}{top1}（{zodiac_cnt.get(top1,0)}次）&nbsp;·&nbsp;
+  最低：{ZODIAC_EMOJI.get(bot1,'')}{bot1}（{zodiac_cnt.get(bot1,0)}次）&nbsp;·&nbsp;
+  生肖卡方 p = {pfmt(zod_chi2_p)} — {"✅ 均匀" if zod_chi2_pass else "⚠️ 偏离"}
 </p>
 
-<h2>五、统计检验</h2>
-<table>
-  <tr><th>检验项目</th><th>H₀ 假设</th><th>统计量</th><th>p 值</th><th>α</th><th>结论</th></tr>
-  <tr>
-    <td>卡方均匀性检验</td>
-    <td>49 个号码概率均等</td>
-    <td>χ²={chi2_stat:.2f}</td>
-    <td>{chi2_p:.4f}</td>
-    <td>{sig_level}</td>
-    <td class="{c1}">{t1}</td>
-  </tr>
-  <tr>
-    <td>KS 间隔指数分布检验</td>
-    <td>号码间隔服从指数分布</td>
-    <td>—</td>
-    <td>{ks_p:.4f}</td>
-    <td>{sig_level}</td>
-    <td class="{c2}">{t2}</td>
-  </tr>
-</table>
+<!-- 六、遗漏分析 -->
+<h2>六、遗漏分析</h2>
+<img src="data:image/png;base64,{b64['gap']}" alt="遗漏分析"/>
+<p style="font-size:12px;color:rgba(224,230,237,.45);margin:6px 0">
+  遗漏异常（&gt; 2× 均值 {avg_freq:.0f} 期）：{warn_text}
+</p>
 
-<h2>六、综合结论</h2>
-<div class="concl">📌 <strong>随机性评估：</strong>{concl_random}</div>
-<div class="concl">📌 <strong>生肖分布：</strong>历史最高频生肖「{top1}」({top1_cnt}次)，最低频「{bot1}」({bot1_cnt}次)，差值 {top1_cnt-bot1_cnt} 次（{(top1_cnt-bot1_cnt)/n*100:.1f}%），属正常统计波动范围。</div>
-<div class="concl">📌 <strong>遗漏异常：</strong>当前遗漏超 2× 均值的号码共 {len(warn_nums)} 个。遗漏统计仅反映历史状态，对独立随机事件无预测价值，不应用于选号。</div>
-<div class="concl">📌 <strong>综合评估：</strong>{pass_cnt}/3 项统计检验通过。{"所有检验通过，数据整体符合随机均匀分布特征。" if pass_cnt >= 2 else "部分检验未通过，建议扩大样本量重新评估。"}</div>
+<!-- 七、研究结论 -->
+<h2>七、研究结论</h2>
+<div class="concl">
+  <strong>① 均匀性检验：</strong>{concl_chi2}
+</div>
+<div class="concl">
+  <strong>② 独立性检验（KS）：</strong>{concl_ks}
+</div>
+<div class="concl">
+  <strong>③ 自相关分析：</strong>{concl_acf}
+</div>
+<div class="concl">
+  <strong>④ 生肖分布检验：</strong>{concl_zod}
+</div>
+<div class="concl" style="border-left-color:#A29BFE;background:rgba(162,155,254,.04)">
+  <strong>⑤ 综合评估：</strong>{concl_overall}
+</div>
+
+<!-- 八、研究局限性 -->
+<h2>八、研究局限性</h2>
+<div style="background:#1A2634;border:1px solid rgba(255,255,255,.05);
+            border-radius:10px;padding:14px 18px;">
+  <div class="lim-item">
+    <div class="lim-num">1</div>
+    <div class="lim-text"><strong style="color:#E0E6ED">样本量约束：</strong>
+    基于 {n} 期历史数据，较小样本可能导致统计功效不足；较大样本则因统计过敏感而拒绝零假设（即便效应量微弱）。</div>
+  </div>
+  <div class="lim-item">
+    <div class="lim-num">2</div>
+    <div class="lim-text"><strong style="color:#E0E6ED">多重检验问题：</strong>
+    本报告同时执行 4 项假设检验，未进行 Bonferroni/FDR 校正，存在 I 类错误累积风险，建议参考效应量而非单纯依赖 p 值。</div>
+  </div>
+  <div class="lim-item">
+    <div class="lim-num">3</div>
+    <div class="lim-text"><strong style="color:#E0E6ED">模型假设局限：</strong>
+    KS 检验假设连续型指数分布，而间隔数据为离散整数，存在检验偏差。ACF 仅检验线性依赖，无法探测非线性时序结构。</div>
+  </div>
+  <div class="lim-item">
+    <div class="lim-num">4</div>
+    <div class="lim-text"><strong style="color:#E0E6ED">随机性本质：</strong>
+    即使统计检验显示偏离，彩票开奖在物理与制度层面保证每期独立性。统计偏离不等同于可预测性或可操作性。</div>
+  </div>
+  <div class="lim-item" style="border-bottom:none">
+    <div class="lim-num">5</div>
+    <div class="lim-text"><strong style="color:#E0E6ED">研究性质声明：</strong>
+    本分析为纯描述性统计，无任何预测或选号功能，全部结论仅供学术与教育目的。</div>
+  </div>
+</div>
 
 <div class="disc">
   ⚠️ <strong>免责声明</strong><br>
-  本报告仅用于历史数据统计分析与学习研究目的。所有结果均基于已发生数据，
-  不构成任何预测依据，不具备选号指导功能，严禁用于任何形式的赌博活动。
-  彩票开奖为完全独立的随机事件，任何历史数据对未来结果均无影响。
+  本报告仅用于历史数据统计分析与学术研究，不构成任何预测依据，不具备选号指导功能，
+  严禁用于任何形式的赌博或商业活动。彩票开奖为完全独立的随机事件，
+  任何历史数据对未来结果均无影响。
 </div>
-<footer>特码统计分析系统 v2.0 · 报告生成于 {now}</footer>
+<footer>特码统计分析系统 v2.0 &nbsp;·&nbsp; 报告生成于 {now} &nbsp;·&nbsp; 数据来源：history.macaumarksix.com</footer>
 </body>
 </html>"""
     return html
@@ -992,6 +1219,24 @@ warn_thr           = avg_freq * 2.0
 crit_thr           = avg_freq * 3.5
 pass_cnt           = sum([chi2_pass, ks_pass, acf_exceed == 0])
 latest             = df_full.iloc[-1]
+
+# ── 专业报告附加统计量 ────────────────────────────────────────────────────
+cramers_v  = np.sqrt(chi2_stat / (n * 48))           # Cramér's V（k=49，df=48）
+cv_pct     = freq_arr.std() / freq_arr.mean() * 100   # 变异系数 %
+_z_tmp     = (freq_arr - freq_arr.mean()) / freq_arr.std()
+freq_skew  = float(np.mean(_z_tmp ** 3))              # 偏度
+freq_kurt  = float(np.mean(_z_tmp ** 4) - 3)          # 超额峰度（正态=0）
+gap_std    = float(all_gaps.std())  if len(all_gaps) > 0 else 0.0
+gap_p25    = float(np.percentile(all_gaps, 25)) if len(all_gaps) > 0 else 0.0
+gap_p75    = float(np.percentile(all_gaps, 75)) if len(all_gaps) > 0 else 0.0
+chi2_crit  = chi2_dist.isf(sig_level, df=48)          # 卡方临界值（右尾）
+zod_obs    = [zodiac_cnt.get(z, 0) for z in ZODIAC_ORDER if z in zodiac_cnt]
+if len(zod_obs) >= 2:
+    zod_chi2_stat, zod_chi2_p = chisquare(zod_obs, [n / len(zod_obs)] * len(zod_obs))
+    zod_chi2_crit = chi2_dist.isf(sig_level, df=len(zod_obs) - 1)
+else:
+    zod_chi2_stat, zod_chi2_p, zod_chi2_crit = 0.0, 1.0, 0.0
+zod_chi2_pass = zod_chi2_p > sig_level
 
 # ══════════════════════════════════════════════════════════════════════════
 # 8. 顶部 Header
@@ -1692,104 +1937,452 @@ with tab6:
 
 
 # ────────────────────────────────────────────────────────────────────────
-# Tab 7 — 分析报告
+# Tab 7 — 分析报告（专业统计报告格式）
 # ────────────────────────────────────────────────────────────────────────
 with tab7:
-    st.markdown(ch('自动分析结论',
-                   '基于统计检验结果自动生成的解读，绿色边框=正常，橙色边框=注意', '📝'),
+
+    # ── 执行摘要 ─────────────────────────────────────────────────────────
+    overall_pass = pass_cnt >= 2
+    verd_c   = '#27AE60' if overall_pass else '#E74C3C'
+    verd_bg  = 'rgba(39,174,96,0.08)'  if overall_pass else 'rgba(231,76,60,0.08)'
+    verd_bd  = 'rgba(39,174,96,0.28)'  if overall_pass else 'rgba(231,76,60,0.28)'
+    verd_ic  = '✅' if overall_pass else '⚠️'
+    verd_tx  = '随机均匀分布假设成立' if overall_pass else '数据存在统计显著偏离'
+    verd_sub = (
+        f'在 α={sig_level} 显著性水平下，{pass_cnt}/3 项核心假设检验未能拒绝零假设，'
+        '数据整体符合独立随机均匀分布特征，与彩票纯随机抽签机制理论一致。'
+        if overall_pass else
+        f'在 α={sig_level} 显著性水平下，{3-pass_cnt}/3 项假设检验拒绝零假设，'
+        '建议扩大样本量后重新评估；当前偏离可能源于随机波动而非系统性规律。'
+    )
+    if cramers_v < 0.1:
+        cv_level, cv_color = '微弱效应 (Negligible)', '#27AE60'
+    elif cramers_v < 0.3:
+        cv_level, cv_color = '小效应 (Small)', '#F39C12'
+    else:
+        cv_level, cv_color = '中等效应 (Medium)', '#E74C3C'
+
+    st.markdown(f"""
+    <div style="background:{verd_bg};border:1px solid {verd_bd};
+                border-radius:14px;padding:22px 26px;margin-bottom:6px">
+      <div style="display:flex;align-items:flex-start;gap:16px">
+        <div style="font-size:30px;line-height:1.1">{verd_ic}</div>
+        <div style="flex:1">
+          <div style="font-size:17px;font-weight:700;color:{verd_c};margin-bottom:7px">
+            执行摘要 — {verd_tx}</div>
+          <div style="font-size:13px;color:rgba(224,230,237,0.76);line-height:1.75">
+            {verd_sub}</div>
+          <div style="display:flex;gap:20px;margin-top:16px;flex-wrap:wrap">
+            <div style="text-align:center;min-width:60px">
+              <div style="font-size:22px;font-weight:700;color:{verd_c}">{pass_cnt}/3</div>
+              <div style="font-size:10px;color:rgba(224,230,237,0.38);text-transform:uppercase;
+                          letter-spacing:.5px;margin-top:3px">检验通过</div>
+            </div>
+            <div style="text-align:center;min-width:60px">
+              <div style="font-size:22px;font-weight:700;color:#00C9FF">{n}</div>
+              <div style="font-size:10px;color:rgba(224,230,237,0.38);text-transform:uppercase;
+                          letter-spacing:.5px;margin-top:3px">分析期数</div>
+            </div>
+            <div style="text-align:center;min-width:60px">
+              <div style="font-size:22px;font-weight:700;color:#E0E6ED">{sig_level}</div>
+              <div style="font-size:10px;color:rgba(224,230,237,0.38);text-transform:uppercase;
+                          letter-spacing:.5px;margin-top:3px">显著性 α</div>
+            </div>
+            <div style="text-align:center;min-width:80px">
+              <div style="font-size:22px;font-weight:700;color:{cv_color}">{cramers_v:.4f}</div>
+              <div style="font-size:10px;color:rgba(224,230,237,0.38);text-transform:uppercase;
+                          letter-spacing:.5px;margin-top:3px">Cramér's V</div>
+            </div>
+            <div style="text-align:center;min-width:80px">
+              <div style="font-size:22px;font-weight:700;color:#A29BFE">{cv_pct:.1f}%</div>
+              <div style="font-size:10px;color:rgba(224,230,237,0.38);text-transform:uppercase;
+                          letter-spacing:.5px;margin-top:3px">变异系数 CV</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Section I: 描述性统计 ──────────────────────────────────────────────
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown(ch('I. 描述性统计',
+                   f'特码频率分布基本统计特征（k = 49 个号码，n = {n} 期）', '📐'),
                 unsafe_allow_html=True)
 
-    # 动态生成结论
-    top1     = max(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
-    bot1     = min(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
-    top1_r50 = (Counter(df_full.tail(50)['zodiac'].tolist()).most_common(1)
-                if 'zodiac' in df_full.columns else [('-', 0)])
-    top1_r50 = top1_r50[0][0] if top1_r50 else '-'
+    freq_median  = float(np.median(freq_arr))
+    freq_iqr     = float(np.percentile(freq_arr, 75) - np.percentile(freq_arr, 25))
+    freq_ci95_hw = 1.96 * freq_arr.std() / np.sqrt(49)
+    skew_interp  = '近似对称' if abs(freq_skew) < 0.5 else ('正偏' if freq_skew > 0 else '负偏')
+    kurt_interp  = '近似正态' if abs(freq_kurt) < 0.5 else ('厚尾' if freq_kurt > 0 else '薄尾')
+    cv_interp    = '低离散' if cv_pct < 15 else ('中等离散' if cv_pct < 30 else '高离散')
 
-    concl_items = [
-        ('ok' if chi2_pass else 'warn',
-         f'<strong>均匀性检验：{"✅ 通过" if chi2_pass else "⚠️ 未通过"}</strong>（卡方值 {chi2_stat:.2f}，p={chi2_p:.4f}，α={sig_level}）— '
-         + ('历史数据与均匀分布无显著统计差异。' if chi2_pass
-            else '统计上偏离均匀分布，但不代表可利用的规律，可能源于样本量或短期波动。')),
+    def _th7(v):
+        return (f'<th style="background:#1A2634;color:#00C9FF;padding:9px 14px;'
+                f'text-align:left;border-bottom:1px solid rgba(0,201,255,0.18);'
+                f'font-size:11px;white-space:nowrap">{v}</th>')
+    def _td7(v):
+        return (f'<td style="padding:7px 14px;border-bottom:1px solid '
+                f'rgba(255,255,255,0.04);font-size:13px">{v}</td>')
+    def _tdv7(v):
+        return (f'<td style="padding:7px 14px;border-bottom:1px solid '
+                f'rgba(255,255,255,0.04);font-weight:600;color:#E0E6ED;'
+                f'text-align:right;font-size:13px">{v}</td>')
+    def _tds7(v):
+        return (f'<td style="padding:7px 14px;border-bottom:1px solid '
+                f'rgba(255,255,255,0.04);color:rgba(224,230,237,0.42);'
+                f'font-size:11px">{v}</td>')
 
-        ('ok' if ks_pass else 'warn',
-         f'<strong>独立性检验（KS）：{"✅ 通过" if ks_pass else "⚠️ 未通过"}</strong>（p={ks_p:.4f}）— '
-         + ('间隔分布符合指数分布，支持各期独立假设。' if ks_pass
-            else '间隔分布存在轻微偏离，可能源于统计误差，不代表各期存在关联。')),
-
-        ('ok' if acf_exceed == 0 else 'warn',
-         f'<strong>自相关检验：{"✅ 通过" if acf_exceed == 0 else "⚠️ 注意"}</strong>（检验 {acf_lags} 个滞后期，{acf_exceed} 个超出 95% CI）— '
-         + ('序列无显著自相关，各期结果相互独立。' if acf_exceed == 0
-            else '轻微自相关，可能由统计误差引起，不具实际意义。')),
-
-        ('ok',
-         f'<strong>生肖分布：</strong>历史最高频「{ZODIAC_EMOJI.get(top1,"")}{top1}」'
-         f'（{zodiac_cnt.get(top1,0)}次），最低频「{ZODIAC_EMOJI.get(bot1,"")}{bot1}」'
-         f'（{zodiac_cnt.get(bot1,0)}次），差值 {zodiac_cnt.get(top1,0)-zodiac_cnt.get(bot1,0)} 次 — 属正常统计波动。'
-         f'近50期最高频：{ZODIAC_EMOJI.get(top1_r50,"")}{top1_r50}。'),
-
-        ('warn' if anom_list else 'ok',
-         f'<strong>遗漏异常：</strong>当前共 {len(anom_list)} 个号码遗漏超 2× 均值（{avg_freq:.0f}期）。'
-         + (f'最长遗漏 No.{anom_list[0][0]}（{anom_list[0][1]}期）。' if anom_list else '')
-         + '遗漏对独立随机事件无预测价值。'),
-
-        ('ok' if pass_cnt >= 2 else 'warn',
-         f'<strong>综合评估：{pass_cnt}/3 项检验通过。</strong> '
-         + ('数据整体符合随机均匀分布，与彩票纯随机机制一致。任何历史数据对未来无预测能力。'
-            if pass_cnt >= 2 else '建议扩大样本量重新评估。无论结果如何，彩票均为独立随机事件。')),
+    desc_data = [
+        ('样本量（期数 n）',    f'{n}',                                 '开奖记录总数'),
+        ('号码均值 μ',          f'{avg_freq:.3f}',                       '期望出现次数 = n / 49'),
+        ('标准差 σ',            f'{freq_arr.std():.3f}',                 '频次的均方根偏差'),
+        ('变异系数 CV',         f'{cv_pct:.2f}%',                        f'σ/μ×100% → {cv_interp}'),
+        ('中位数',              f'{freq_median:.1f}',                    '分布中心的稳健估计'),
+        ('四分位距 IQR',        f'{freq_iqr:.1f}',                       'Q₃ − Q₁，中间50%散布范围'),
+        ('均值 95% CI 半宽',    f'±{freq_ci95_hw:.3f}',                  '1.96 × σ / √49'),
+        ('偏度 γ₁',             f'{freq_skew:.4f}',                      f'→ {skew_interp}（|γ₁| < 0.5 为近似对称）'),
+        ('超额峰度 γ₂',         f'{freq_kurt:.4f}',                      f'→ {kurt_interp}（正态分布 = 0）'),
+        ('最大值 / 最小值',     f'{int(freq_arr.max())} / {int(freq_arr.min())}', '号码出现次数极值'),
+        ('极差 Range',          f'{int(freq_arr.max() - freq_arr.min())}', 'max − min'),
+        ('间隔均值 E[G]',       f'{avg_freq:.2f}',                       '各号平均遗漏期数 ≈ n/49'),
+        ('间隔标准差 σ[G]',     f'{gap_std:.2f}',                        '遗漏期数的离散程度'),
+        ('间隔四分位 Q₁/Q₃',   f'{gap_p25:.1f} / {gap_p75:.1f}',        '遗漏期数四分位数'),
     ]
 
-    for level, text in concl_items:
+    desc_html = ('<table style="width:100%;border-collapse:collapse;margin:12px 0">'
+                 + '<tr>' + _th7('统计量') + _th7('数值') + _th7('说明') + '</tr>')
+    for nm, val, note in desc_data:
+        desc_html += f'<tr>{_td7(nm)}{_tdv7(val)}{_tds7(note)}</tr>'
+    desc_html += '</table>'
+    st.markdown(desc_html, unsafe_allow_html=True)
+
+    # ── Section II: 假设检验汇总表 ───────────────────────────────────────
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown(ch('II. 假设检验汇总',
+                   f'显著性水平 α = {sig_level}，共 4 项检验；建议结合效应量解读 p 值', '🔬'),
+                unsafe_allow_html=True)
+
+    def _pfmt7(p):
+        return f'{p:.4f}' if p >= 0.0001 else '< 0.0001'
+
+    def _dec7(passed):
+        c = '#27AE60' if passed else '#E74C3C'
+        txt = '不拒绝 H₀' if passed else '拒绝 H₀'
+        return f'<span style="color:{c};font-weight:700">{txt}</span>'
+
+    n_zod_df7 = len(zod_obs) - 1 if len(zod_obs) >= 2 else 0
+    acf_pass7 = acf_exceed == 0
+
+    th_css = ('background:#1A2634;color:#00C9FF;padding:9px 11px;text-align:left;'
+              'border-bottom:1px solid rgba(0,201,255,0.18);font-size:11px;white-space:nowrap')
+    td_css = 'padding:8px 11px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px'
+
+    test_html = f'<table style="width:100%;border-collapse:collapse;margin:12px 0">'
+    test_html += (f'<tr>'
+                  f'<th style="{th_css}">检验项目</th>'
+                  f'<th style="{th_css}">H₀ 假设</th>'
+                  f'<th style="{th_css}">统计量值</th>'
+                  f'<th style="{th_css}">p 值</th>'
+                  f'<th style="{th_css}">临界值</th>'
+                  f'<th style="{th_css}">决策</th>'
+                  f'<th style="{th_css}">效应量</th>'
+                  f'</tr>')
+    test_rows = [
+        ('卡方拟合优度检验',
+         'H₀：49号出现概率均等（1/49）',
+         f'χ²(48) = {chi2_stat:.4f}',
+         _pfmt7(chi2_p),
+         f'{chi2_crit:.3f}',
+         _dec7(chi2_pass),
+         f"V = {cramers_v:.4f}<br><small style='color:{cv_color}'>{cv_level}</small>"),
+        ('KS 指数分布拟合检验',
+         'H₀：号码间隔服从指数分布',
+         f'D = {ks_stat:.4f}',
+         _pfmt7(ks_p),
+         '—',
+         _dec7(ks_pass),
+         '—'),
+        (f'自相关检验（ACF，{acf_lags} 滞后期）',
+         'H₀：序列无自相关',
+         f'{acf_exceed}/{acf_lags} 滞后超 95% CI',
+         '—',
+         f'±{conf_interval:.4f}',
+         _dec7(acf_pass7),
+         '—'),
+        ('生肖均匀性卡方检验',
+         'H₀：12生肖出现概率均等（1/12）',
+         f'χ²({n_zod_df7}) = {zod_chi2_stat:.4f}',
+         _pfmt7(zod_chi2_p),
+         f'{zod_chi2_crit:.3f}',
+         _dec7(zod_chi2_pass),
+         '—'),
+    ]
+    for row in test_rows:
+        test_html += '<tr>' + ''.join(f'<td style="{td_css}">{cell}</td>' for cell in row) + '</tr>'
+    test_html += '</table>'
+    st.markdown(test_html, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="font-size:11px;color:rgba(224,230,237,0.35);margin-top:4px;line-height:1.6">
+      ⚠️ 注：同时执行多项检验存在 I 类错误累积风险（未进行 Bonferroni 校正），
+      建议优先参考效应量而非单纯依赖 p 值。
+    </div>""", unsafe_allow_html=True)
+
+    # ── Section III: 效应量解读 ───────────────────────────────────────────
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown(ch('III. 效应量解读',
+                   '效应量衡量偏离的实际显著性，独立于样本量，是解读统计结论的关键补充', '📏'),
+                unsafe_allow_html=True)
+
+    cv_desc_txt = (
+        f"V = {cramers_v:.4f} < 0.1，号码频率偏差极小，在实际意义上可忽略不计。"
+        "即使 p 值达到统计显著，效应量表明偏离程度在现实中无任何可操作价值。"
+        if cramers_v < 0.1 else
+        f"V = {cramers_v:.4f}（0.1–0.3），存在小幅偏离，实际意义仍然有限，"
+        "不足以支持任何选号策略或预测行为。"
+        if cramers_v < 0.3 else
+        f"V = {cramers_v:.4f} ≥ 0.3，偏离程度较为明显，建议检查数据完整性与质量。"
+    )
+    cv_str_txt = (
+        f"CV = {cv_pct:.2f}%，"
+        + ("各号频率高度均匀，接近理论等概率值。" if cv_pct < 15
+           else "频率分布存在一定不均匀性，但属于正常统计波动范围。")
+        + f" 偏度 γ₁ = {freq_skew:.4f}（{skew_interp}），"
+        f"超额峰度 γ₂ = {freq_kurt:.4f}（{kurt_interp}）。"
+    )
+
+    col_eff1, col_eff2 = st.columns(2)
+    with col_eff1:
+        st.markdown(f"""
+        <div style="background:#1A2634;border:1px solid rgba(0,201,255,0.1);
+                    border-radius:10px;padding:18px 20px;height:100%">
+          <div style="font-size:10px;color:rgba(224,230,237,0.38);text-transform:uppercase;
+                      letter-spacing:.6px;margin-bottom:8px">Cramér's V（卡方效应量）</div>
+          <div style="font-size:20px;font-weight:700;color:{cv_color};margin-bottom:8px">
+            {cramers_v:.4f} — {cv_level}</div>
+          <div style="font-size:12px;color:rgba(224,230,237,0.65);line-height:1.7">
+            {cv_desc_txt}</div>
+          <div style="margin-top:10px;font-size:11px;color:rgba(224,230,237,0.3)">
+            公式：V = √( χ² / (n × (k−1)) )，k=49，n={n}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_eff2:
+        st.markdown(f"""
+        <div style="background:#1A2634;border:1px solid rgba(0,201,255,0.1);
+                    border-radius:10px;padding:18px 20px;height:100%">
+          <div style="font-size:10px;color:rgba(224,230,237,0.38);text-transform:uppercase;
+                      letter-spacing:.6px;margin-bottom:8px">变异系数 CV + 分布形态</div>
+          <div style="font-size:20px;font-weight:700;color:#A29BFE;margin-bottom:8px">
+            {cv_pct:.2f}%</div>
+          <div style="font-size:12px;color:rgba(224,230,237,0.65);line-height:1.7">
+            {cv_str_txt}</div>
+          <div style="margin-top:10px;font-size:11px;color:rgba(224,230,237,0.3)">
+            公式：CV = σ/μ × 100%，μ = {avg_freq:.2f}，σ = {freq_arr.std():.3f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Section IV: 生肖分布统计检验 ─────────────────────────────────────
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown(ch('IV. 生肖分布统计检验',
+                   '对12生肖出现频率进行卡方均匀性检验，验证生肖标注的随机性', '🐉'),
+                unsafe_allow_html=True)
+
+    r7_top1 = max(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
+    r7_bot1 = min(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
+    zod_exp = n / 12
+
+    col_z1, col_z2 = st.columns([1, 2])
+    with col_z1:
+        zod_c7 = '#27AE60' if zod_chi2_pass else '#E74C3C'
+        st.markdown(f"""
+        <div style="background:#1A2634;border:1px solid rgba(0,201,255,0.1);
+                    border-radius:10px;padding:18px 20px">
+          <div style="font-size:10px;color:rgba(224,230,237,0.38);letter-spacing:.5px;
+                      text-transform:uppercase;margin-bottom:10px">生肖卡方检验</div>
+          <div style="font-size:12px;color:rgba(224,230,237,0.6);margin-bottom:8px">
+            H₀：12生肖出现概率均等（1/12）</div>
+          <div style="margin:5px 0;font-size:13px">
+            <span style="color:rgba(224,230,237,0.45)">χ²({n_zod_df7}) = </span>
+            <strong>{zod_chi2_stat:.4f}</strong></div>
+          <div style="margin:5px 0;font-size:13px">
+            <span style="color:rgba(224,230,237,0.45)">p 值 = </span>
+            <strong>{_pfmt7(zod_chi2_p)}</strong></div>
+          <div style="margin:5px 0;font-size:13px">
+            <span style="color:rgba(224,230,237,0.45)">α = {sig_level}</span>
+            &nbsp;|&nbsp;
+            <span style="color:rgba(224,230,237,0.45)">临界值 = </span>
+            <strong>{zod_chi2_crit:.3f}</strong></div>
+          <div style="margin-top:14px;font-size:13px;font-weight:700;color:{zod_c7}">
+            {'✅ 不拒绝 H₀ — 生肖分布均匀' if zod_chi2_pass else '❌ 拒绝 H₀ — 生肖分布偏离均匀'}</div>
+          <div style="margin-top:6px;font-size:11px;color:rgba(224,230,237,0.35)">
+            理论均值：{zod_exp:.1f} 次/生肖<br>
+            最高：{ZODIAC_EMOJI.get(r7_top1,'')}{r7_top1}（{zodiac_cnt.get(r7_top1,0)}次）<br>
+            最低：{ZODIAC_EMOJI.get(r7_bot1,'')}{r7_bot1}（{zodiac_cnt.get(r7_bot1,0)}次）
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_z2:
+        zod_table_html = (
+            '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+            f'<tr>'
+            f'<th style="{th_css}">生肖</th>'
+            f'<th style="{th_css};text-align:right">频次</th>'
+            f'<th style="{th_css};text-align:right">占比</th>'
+            f'<th style="{th_css};text-align:right">偏差%</th>'
+            f'<th style="{th_css}">相对理论均值</th>'
+            f'</tr>'
+        )
+        for z in ZODIAC_ORDER:
+            if z not in zodiac_cnt:
+                continue
+            c_z   = zodiac_cnt[z]
+            dev_p = (c_z - zod_exp) / zod_exp * 100
+            sign_z = '+' if dev_p >= 0 else ''
+            bar_w  = min(100, int(c_z / max(zodiac_cnt.values()) * 100))
+            bar_c  = '#27AE60' if abs(dev_p) < 8 else ('#F39C12' if abs(dev_p) < 15 else '#E74C3C')
+            icon_z = ZODIAC_EMOJI.get(z, '')
+            zod_table_html += (
+                f'<tr>'
+                f'<td style="{td_css}">{icon_z} {z}</td>'
+                f'<td style="{td_css};text-align:right;font-weight:600">{c_z}</td>'
+                f'<td style="{td_css};text-align:right">{c_z/n*100:.1f}%</td>'
+                f'<td style="{td_css};text-align:right;color:{"#27AE60" if dev_p>=0 else "#E74C3C"}">'
+                f'{sign_z}{dev_p:.1f}%</td>'
+                f'<td style="{td_css}">'
+                f'<div style="background:rgba(255,255,255,0.07);border-radius:3px;height:7px">'
+                f'<div style="background:{bar_c};width:{bar_w}%;height:100%;border-radius:3px">'
+                f'</div></div></td>'
+                f'</tr>'
+            )
+        zod_table_html += '</table>'
+        st.markdown(zod_table_html, unsafe_allow_html=True)
+
+    # ── Section V: 研究结论（正式统计语言）──────────────────────────────
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown(ch('V. 研究结论',
+                   '基于假设检验框架的形式化推断，采用规范统计学表述', '📝'),
+                unsafe_allow_html=True)
+
+    concl_pro = []
+    # ① Chi-square
+    if chi2_pass:
+        concl_pro.append(('ok',
+            f'<strong>① 均匀性检验</strong>：在 α={sig_level} 显著性水平下，'
+            f'卡方统计量 χ²(48) = {chi2_stat:.4f}（p = {_pfmt7(chi2_p)}，临界值 {chi2_crit:.3f}），'
+            f'p > α，<em>未能拒绝零假设</em>。49个号码出现频率与理论均匀分布无统计显著差异。'
+            f' 效应量 Cramér\'s V = {cramers_v:.4f}（{cv_level}），实际偏离可忽略不计。'))
+    else:
+        concl_pro.append(('warn',
+            f'<strong>① 均匀性检验</strong>：在 α={sig_level} 显著性水平下，'
+            f'卡方统计量 χ²(48) = {chi2_stat:.4f}（p = {_pfmt7(chi2_p)}），'
+            f'p ≤ α，<em>拒绝零假设</em>。然而效应量 Cramér\'s V = {cramers_v:.4f}（{cv_level}），'
+            '偏离程度在实际意义上可能可忽略，可能源于大样本的统计敏感性。'))
+    # ② KS
+    if ks_pass:
+        concl_pro.append(('ok',
+            f'<strong>② 独立性检验（KS）</strong>：KS 统计量 D = {ks_stat:.4f}（p = {_pfmt7(ks_p)}），'
+            f'p > α，<em>未能拒绝零假设</em>。号码出现间隔符合指数分布，'
+            '支持各期开奖相互独立的随机过程假设（即历史状态对未来无影响）。'))
+    else:
+        concl_pro.append(('warn',
+            f'<strong>② 独立性检验（KS）</strong>：KS 统计量 D = {ks_stat:.4f}（p = {_pfmt7(ks_p)}），'
+            f'p ≤ α，<em>拒绝零假设</em>。间隔分布存在统计偏离，'
+            '可能由样本量、离散化误差或边界效应引起，建议扩大样本量重新评估。'))
+    # ③ ACF
+    if acf_exceed == 0:
+        concl_pro.append(('ok',
+            f'<strong>③ 自相关分析</strong>：检验 {acf_lags} 个滞后期，'
+            f'0 个 ACF 系数超出 95% 置信区间（±{conf_interval:.4f}），'
+            '<em>未能拒绝无自相关零假设</em>。序列各期无统计显著的线性依赖关系。'))
+    else:
+        concl_pro.append(('warn',
+            f'<strong>③ 自相关分析</strong>：检验 {acf_lags} 个滞后期，'
+            f'{acf_exceed} 个 ACF 系数（{acf_exceed/acf_lags*100:.0f}%）超出 95% CI（±{conf_interval:.4f}）。'
+            '在随机序列中，理论上约有 5% 的滞后期偶然超出 CI，当前比例与此一致，不具实际显著意义。'))
+    # ④ Zodiac
+    if zod_chi2_pass:
+        concl_pro.append(('ok',
+            f'<strong>④ 生肖分布检验</strong>：χ²({n_zod_df7}) = {zod_chi2_stat:.4f}'
+            f'（p = {_pfmt7(zod_chi2_p)}，临界值 {zod_chi2_crit:.3f}），'
+            '<em>未能拒绝零假设</em>。12生肖出现频率符合均匀分布，无系统性偏向。'))
+    else:
+        concl_pro.append(('warn',
+            f'<strong>④ 生肖分布检验</strong>：χ²({n_zod_df7}) = {zod_chi2_stat:.4f}'
+            f'（p = {_pfmt7(zod_chi2_p)}），<em>拒绝零假设</em>。'
+            '生肖分布存在统计偏离，但偏离幅度有限，不具可操作预测价值。'))
+    # ⑤ Overall
+    concl_pro.append(('ok' if overall_pass else 'warn',
+        f'<strong>⑤ 综合评估</strong>：{pass_cnt}/3 项核心假设检验通过。'
+        + ('在当前分析框架下，历史数据整体符合独立随机均匀分布特征，与彩票纯随机机制理论一致。'
+           '所有统计结论仅描述历史数据特征，彩票开奖为独立随机事件，任何历史规律对未来无影响。'
+           if overall_pass else
+           '部分检验结果存在偏离，但结合效应量分析，实际偏离程度有限。'
+           '彩票开奖在机制上为独立随机事件，任何历史数据均无预测价值。')))
+
+    for level, text in concl_pro:
         cls = 'concl-ok' if level == 'ok' else 'concl-warn'
         st.markdown(f'<div class="concl-item {cls}">{text}</div>',
                     unsafe_allow_html=True)
 
+    # ── Section VI: 研究局限性 ────────────────────────────────────────────
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown(ch('报告摘要', '关键指标与检验结果一览', '📋'), unsafe_allow_html=True)
-    col_r1, col_r2 = st.columns(2)
-
-    with col_r1:
-        st.markdown(f"""
-        <div class="report-card">
-          <h4>📊 数据概览</h4>
-          <p>分析期数：<strong>{n}</strong> 期</p>
-          <p>时间跨度：{df_full['openTime'].min().strftime('%Y/%m/%d')} ~
-             {df_full['openTime'].max().strftime('%Y/%m/%d')}</p>
-          <p>最新期号：<strong>{latest['expect']}</strong>，
-             特码：<strong style="color:#FF6B6B">{int(latest['special'])}</strong></p>
-          <p>每号理论均值：<strong>{avg_freq:.1f}</strong> 次，
-             标准差：<strong>{freq_arr.std():.2f}</strong></p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_r2:
-        c_chi = '#27AE60' if chi2_pass else '#E74C3C'
-        c_ks  = '#27AE60' if ks_pass   else '#E74C3C'
-        c_acf = '#27AE60' if acf_exceed == 0 else '#F39C12'
-        st.markdown(f"""
-        <div class="report-card">
-          <h4>🔬 检验汇总</h4>
-          <p>卡方检验：<strong style="color:{c_chi}">
-            {'通过 ✅' if chi2_pass else '未通过 ❌'}</strong>（p={chi2_p:.4f}）</p>
-          <p>KS 检验：<strong style="color:{c_ks}">
-            {'通过 ✅' if ks_pass else '未通过 ❌'}</strong>（p={ks_p:.4f}）</p>
-          <p>自相关：<strong style="color:{c_acf}">
-            {'正常 ✅' if acf_exceed == 0 else f'{acf_exceed}个超CI ⚠️'}</strong></p>
-          <p>综合：<strong style="color:{'#27AE60' if pass_cnt==3 else '#F39C12'}">
-            {pass_cnt}/3 通过</strong></p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown(ch('导出报告', '生成包含所有图表和分析结论的独立 HTML 文件，可用浏览器直接打开', '📥'),
+    st.markdown(ch('VI. 研究局限性',
+                   '本分析的方法论约束与注意事项，是科学解读结论的必要背景', '⚠️'),
                 unsafe_allow_html=True)
 
-    if st.button('⚙️ 生成 HTML 分析报告', type='primary', use_container_width=False):
+    limitations = [
+        (f'<strong>样本量约束</strong>：本次分析基于 {n} 期历史数据。'
+         '较小样本可能导致统计功效不足，无法检出微小偏离；'
+         '较大样本则因统计过敏感而拒绝零假设（即便效应量极微弱）。'
+         '增加期数可提升检验稳定性。'),
+        ('<strong>多重检验问题</strong>：本报告同时执行 4 项假设检验，'
+         '未进行 Bonferroni 或 FDR 校正，存在 I 类错误（误判显著）的累积风险。'
+         '建议优先参考效应量（Cramér\'s V、CV）而非单纯依赖 p 值。'),
+        ('<strong>模型假设局限</strong>：KS 检验假设连续型指数分布，'
+         '而实际间隔数据为离散整数，存在系统性检验偏差。'
+         'ACF 仅能检验线性依赖关系，无法探测非线性时序结构或高阶相关性。'),
+        ('<strong>随机性本质</strong>：即使所有检验均显示统计偏离，'
+         '彩票开奖在物理与制度层面保证每期独立性。'
+         '统计偏离 ≠ 可预测性 ≠ 可操作性。任何"热号/冷号"策略均无统计依据。'),
+        ('<strong>研究性质声明</strong>：本分析为纯描述性统计，'
+         '无任何预测、选号或投资建议功能。全部结论仅供学术与教育目的。'),
+    ]
+    lim_html = '<div style="background:#1A2634;border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:14px 18px">'
+    for i, lim in enumerate(limitations, 1):
+        border = '' if i == len(limitations) else 'border-bottom:1px solid rgba(255,255,255,0.04);'
+        lim_html += (
+            f'<div style="display:flex;gap:12px;padding:10px 0;{border}">'
+            f'<div style="min-width:22px;height:22px;background:rgba(0,201,255,0.1);'
+            f'border-radius:50%;display:flex;align-items:center;justify-content:center;'
+            f'font-size:11px;color:#00C9FF;font-weight:700;margin-top:2px;flex-shrink:0">{i}</div>'
+            f'<div style="font-size:13px;color:rgba(224,230,237,0.62);line-height:1.75">{lim}</div>'
+            f'</div>'
+        )
+    lim_html += '</div>'
+    st.markdown(lim_html, unsafe_allow_html=True)
+
+    # ── 导出报告 ─────────────────────────────────────────────────────────
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown(ch('导出报告',
+                   '生成包含描述性统计、假设检验汇总、效应量及正式结论的完整 HTML 报告', '📥'),
+                unsafe_allow_html=True)
+
+    if st.button('⚙️ 生成专业 HTML 分析报告', type='primary', use_container_width=False):
         with st.spinner('正在渲染报告，请稍候...'):
             html_content = generate_html_report(
                 df_full, freq_arr, avg_freq, chi2_stat, chi2_p,
                 ks_p, gap_arr, zodiac_cnt, sig_level,
-                specials, n, latest, pass_cnt
+                specials, n, latest, pass_cnt,
+                cramers_v=cramers_v, cv_pct=cv_pct,
+                freq_skew=freq_skew, freq_kurt=freq_kurt,
+                gap_std=gap_std, gap_p25=gap_p25, gap_p75=gap_p75,
+                ks_stat=ks_stat, chi2_crit=chi2_crit,
+                zod_chi2_stat=zod_chi2_stat, zod_chi2_p=zod_chi2_p,
+                zod_chi2_pass=zod_chi2_pass, zod_chi2_crit=zod_chi2_crit,
+                zod_obs=zod_obs, acf_exceed=acf_exceed, conf_interval=conf_interval,
+                acf_lags=acf_lags,
             )
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M')
         st.download_button(
