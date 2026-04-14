@@ -187,16 +187,13 @@ with st.sidebar:
     st.divider()
 
     # ── 分析参数 ──────────────────────────────────────────────────────────
-    st.markdown('**分析权重**')
-    window_n  = st.slider('滚动窗口', 50, 500, 100, step=10, format='%d期')
+    window_n  = st.slider('滚动窗口 (期)', 50, 500, 100, step=10)
     sig_level = st.number_input('显著性水平', 0.01, 0.10, 0.05, step=0.01, format='%.2f')
 
     st.divider()
 
     # ── 显示模式 ──────────────────────────────────────────────────────────
-    st.markdown('**显示模式**')
-    display_mode = st.radio('', ['各生肖', 'Top 5', '全部12肖'],
-                            index=2, label_visibility='collapsed')
+    display_mode = st.radio('显示模式', ['各生肖', 'Top 5', '全部12肖'], index=2)
 
     st.divider()
 
