@@ -16,10 +16,19 @@ import matplotlib
 import matplotlib.pyplot as plt
 import streamlit as st
 
-# 中文字体（macOS）
+# 中文字体 & 深色主题图表
 matplotlib.rcParams['font.sans-serif'] = ['PingFang SC', 'Hiragino Sans GB',
                                            'STHeiti', 'Arial Unicode MS', 'DejaVu Sans']
 matplotlib.rcParams['axes.unicode_minus'] = False
+matplotlib.rcParams['figure.facecolor']  = '#1A2634'
+matplotlib.rcParams['axes.facecolor']    = '#1A2634'
+matplotlib.rcParams['axes.edgecolor']    = '#2A3F54'
+matplotlib.rcParams['axes.labelcolor']   = '#A0AEC0'
+matplotlib.rcParams['xtick.color']       = '#A0AEC0'
+matplotlib.rcParams['ytick.color']       = '#A0AEC0'
+matplotlib.rcParams['text.color']        = '#E0E6ED'
+matplotlib.rcParams['grid.color']        = '#2A3F54'
+matplotlib.rcParams['axes.titlecolor']   = '#E0E6ED'
 from scipy.stats import chisquare
 
 import config
@@ -38,23 +47,96 @@ st.set_page_config(
 # ── 全局样式 ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-  .stat-card {
-    background: #fff;
-    border-radius: 10px;
-    padding: 18px 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.07);
-    text-align: center;
+  /* ── 字体 & 基础 ── */
+  html, body, [class*="css"] {
+    font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
   }
-  .stat-num { font-size: 28px; font-weight: bold; color: #2980B9; }
-  .stat-lbl { font-size: 12px; color: #7F8C8D; margin-top: 4px; }
-  .warn-box {
-    background: #FEF9E7;
-    border-left: 4px solid #F39C12;
-    padding: 10px 16px;
-    border-radius: 0 6px 6px 0;
+
+  /* ── 顶部标题区 ── */
+  .dashboard-header {
+    background: linear-gradient(135deg, #0F2744 0%, #1A3A5C 100%);
+    border-radius: 14px;
+    padding: 28px 32px 22px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(0,201,255,0.15);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  .dashboard-header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 6px;
+    letter-spacing: .5px;
+  }
+  .dashboard-header p {
     font-size: 13px;
-    margin-bottom: 12px;
+    color: rgba(255,255,255,0.5);
+    margin: 0;
   }
+
+  /* ── 统计卡片 ── */
+  .stat-card {
+    background: linear-gradient(145deg, #1A2E44, #152438);
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+    border: 1px solid rgba(0,201,255,0.12);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.3);
+    transition: transform .15s;
+  }
+  .stat-card:hover { transform: translateY(-2px); }
+  .stat-num {
+    font-size: 30px;
+    font-weight: 700;
+    color: #00C9FF;
+    letter-spacing: -.5px;
+  }
+  .stat-lbl {
+    font-size: 11px;
+    color: rgba(224,230,237,0.5);
+    margin-top: 6px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+  }
+
+  /* ── 警告条 ── */
+  .warn-box {
+    background: rgba(243,156,18,0.1);
+    border-left: 3px solid #F39C12;
+    padding: 9px 14px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    color: rgba(224,230,237,0.7);
+    margin-bottom: 16px;
+  }
+
+  /* ── 分节标题 ── */
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #00C9FF;
+    letter-spacing: .5px;
+    padding: 6px 0 2px;
+    border-bottom: 1px solid rgba(0,201,255,0.15);
+    margin-bottom: 14px;
+  }
+
+  /* ── 侧边栏美化 ── */
+  section[data-testid="stSidebar"] {
+    background: #111D2C !important;
+    border-right: 1px solid rgba(0,201,255,0.08);
+  }
+  section[data-testid="stSidebar"] .stMarkdown p {
+    color: rgba(224,230,237,0.7);
+    font-size: 13px;
+  }
+
+  /* ── 图表背景透明 ── */
+  .stPlotlyChart, .stImage { background: transparent !important; }
+
+  /* ── 隐藏 Streamlit 品牌 ── */
+  #MainMenu, footer { visibility: hidden; }
+  header[data-testid="stHeader"] { background: transparent; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -158,9 +240,17 @@ with st.sidebar:
 # 主区域
 # ══════════════════════════════════════════════════════════════════════════
 
-st.title('特码统计分析系统')
-st.markdown('<div class="warn-box">⚠️ 本系统仅用于历史数据统计分析与学习研究，结果不具备任何预测能力，严禁用于赌博或选号。</div>',
-            unsafe_allow_html=True)
+latest_period = df.iloc[-1]
+st.markdown(f"""
+<div class="dashboard-header">
+  <h1>📊 特码统计分析系统</h1>
+  <p>最新期号 {latest_period['expect']} &nbsp;·&nbsp;
+     特码 <strong style="color:#00C9FF">{int(latest_period['special'])}</strong> &nbsp;·&nbsp;
+     截至 {latest_period['openTime'].strftime('%Y-%m-%d')} &nbsp;·&nbsp;
+     共 {len(df_full)} 期历史数据</p>
+</div>
+<div class="warn-box">⚠️ 本系统仅用于历史数据统计分析与学习研究，结果不具备任何预测能力，严禁用于赌博或选号。</div>
+""", unsafe_allow_html=True)
 
 if df is None:
     if IS_CLOUD:
@@ -209,8 +299,8 @@ col_chart, col_info = st.columns([3, 1])
 
 with col_chart:
     fig, ax = plt.subplots(figsize=(14, 4))
-    bar_colors = ['#E74C3C' if c == freq_arr.max() else
-                  '#95A5A6' if c == freq_arr.min() else '#5DADE2'
+    bar_colors = ['#FF6B6B' if c == freq_arr.max() else
+                  '#4A5568' if c == freq_arr.min() else '#00C9FF'
                   for c in freq_arr]
     ax.bar(range(1, 50), freq_arr, color=bar_colors, width=0.7)
     ax.axhline(n / 49, color='black', lw=1.5, linestyle='--',
