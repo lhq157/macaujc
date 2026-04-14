@@ -7,6 +7,7 @@ import glob
 import os
 import sys
 import subprocess
+from pathlib import Path
 from collections import Counter
 
 import numpy as np
@@ -127,6 +128,28 @@ with st.sidebar:
     else:
         st.warning('未找到数据，请点击上方按钮拉取。')
 
+    # ── 时间筛选 ──────────────────────────────────────────────────────────
+    if df is not None:
+        st.divider()
+        st.markdown('**时间筛选**')
+        years = sorted(df['openTime'].dt.year.unique(), reverse=True)
+        year_opts = ['全部'] + [str(y) for y in years]
+        sel_year = st.selectbox('选择年份', year_opts, index=0)
+
+    # ── 报告下载 ──────────────────────────────────────────────────────────
+    report_path = Path(__file__).parent / 'output' / 'reports' / 'analysis_report.html'
+    if report_path.exists():
+        st.divider()
+        st.markdown('**报告下载**')
+        with open(report_path, 'rb') as f:
+            st.download_button(
+                label='📥 下载分析报告',
+                data=f,
+                file_name='analysis_report.html',
+                mime='text/html',
+                use_container_width=True,
+            )
+
     st.divider()
     st.caption('⚠️ 本系统仅用于历史数据统计分析，不具备预测能力，严禁用于赌博或选号。')
 
@@ -145,6 +168,12 @@ if df is None:
     else:
         st.info('👈 点击左侧「拉取最新数据」开始使用')
     st.stop()
+
+# ── 应用时间筛选 ──────────────────────────────────────────────────────────
+df_full = df.copy()
+if sel_year != '全部':
+    df = df[df['openTime'].dt.year == int(sel_year)].reset_index(drop=True)
+    st.info(f'📅 当前显示 {sel_year} 年数据（共 {len(df)} 期）')
 
 # ── 统计卡片 ─────────────────────────────────────────────────────────────
 specials  = df['special'].values.astype(int)
@@ -378,5 +407,73 @@ if 'zodiac' in df.columns:
             st.markdown(f'**{z}** — {v} 次 ({sign}{delta:.1f})')
 
 st.markdown('<br>', unsafe_allow_html=True)
+
+# ── 号码查询 ──────────────────────────────────────────────────────────────
+st.subheader('🔍 号码查询')
+
+query_num = st.number_input('输入号码（1–49）', min_value=1, max_value=49,
+                            value=1, step=1)
+
+# 使用全量数据做查询（不受年份筛选影响）
+q_df    = df_full.copy()
+q_specs = q_df['special'].values.astype(int)
+q_n     = len(q_specs)
+
+# 基础统计
+q_count   = int(np.sum(q_specs == query_num))
+q_freq    = q_count / q_n * 100
+q_theory  = q_n / 49
+q_idx     = np.where(q_specs == query_num)[0]
+q_gap_now = q_n - 1 - int(q_idx[-1]) if len(q_idx) > 0 else q_n
+q_last    = q_df.iloc[q_idx[-1]]['openTime'].strftime('%Y-%m-%d') if len(q_idx) > 0 else '从未出现'
+
+# 历史间隔
+gaps = np.diff(q_idx).tolist() if len(q_idx) > 1 else []
+avg_gap_q = np.mean(gaps) if gaps else 0
+
+col_qi, col_qc, col_qt = st.columns(3)
+with col_qi:
+    st.metric('出现次数',   f'{q_count} 次',  f'{q_freq:.1f}%')
+    st.metric('理论期望',   f'{q_theory:.1f} 次')
+    st.metric('最近一次',   q_last)
+    st.metric('当前遗漏',   f'{q_gap_now} 期')
+    if gaps:
+        st.metric('平均间隔', f'{avg_gap_q:.1f} 期')
+
+with col_qc:
+    # 近 200 期出现位置散点图
+    recent_mask = q_idx[q_idx >= max(0, q_n - 200)]
+    fig_q1, ax_q1 = plt.subplots(figsize=(7, 3))
+    ax_q1.scatter(recent_mask - max(0, q_n - 200),
+                  [query_num] * len(recent_mask),
+                  color='#E74C3C', s=60, zorder=3)
+    ax_q1.set_xlim(0, 200)
+    ax_q1.set_ylim(0, 50)
+    ax_q1.set_xlabel('近 200 期（最新在右）')
+    ax_q1.set_title(f'号码 {query_num} 出现位置', fontsize=11)
+    ax_q1.grid(alpha=0.3)
+    fig_q1.patch.set_facecolor('none')
+    st.pyplot(fig_q1)
+    plt.close(fig_q1)
+
+with col_qt:
+    # 间隔分布直方图
+    if len(gaps) >= 3:
+        fig_q2, ax_q2 = plt.subplots(figsize=(7, 3))
+        ax_q2.hist(gaps, bins=20, color='#5DADE2', edgecolor='white')
+        ax_q2.axvline(avg_gap_q, color='#E74C3C', lw=1.5,
+                      linestyle='--', label=f'均值 {avg_gap_q:.1f}')
+        ax_q2.axvline(49, color='black', lw=1, linestyle=':',
+                      label='理论 49')
+        ax_q2.set_xlabel('出现间隔（期）')
+        ax_q2.set_title('历史间隔分布', fontsize=11)
+        ax_q2.legend(fontsize=8)
+        ax_q2.grid(alpha=0.3)
+        fig_q2.patch.set_facecolor('none')
+        st.pyplot(fig_q2)
+        plt.close(fig_q2)
+    else:
+        st.info('数据不足，无法绘制间隔分布')
+
 st.divider()
 st.caption('📊 特码统计分析系统 · 数据仅供学习研究 · 严禁用于赌博或选号')
