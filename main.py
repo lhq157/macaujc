@@ -6,11 +6,16 @@ main.py — 特码统计分析系统 · 数据管道
 
 import glob
 import os
+import time
 import requests
 import pandas as pd
 from datetime import datetime
 
 import config
+
+# ── 轮询参数 ──────────────────────────────────────────────────────────────
+POLL_INTERVAL = 10    # 每次检查间隔（秒）
+POLL_TIMEOUT  = 300   # 最长等待时间（秒，5 分钟）
 
 
 # ── 生肖映射 ─────────────────────────────────────────────────────────────
@@ -154,6 +159,56 @@ def export_csv(df_new: pd.DataFrame, date_str: str) -> str:
     return csv_path
 
 
+# ── 获取本地最新期号 ──────────────────────────────────────────────────────
+
+def local_latest_expect() -> str:
+    """读取本地 CSV，返回最新期号；无本地数据则返回 '0'"""
+    existing = sorted(glob.glob(os.path.join(config.OUTPUT_DIR, "????????.csv")))
+    if not existing:
+        return '0'
+    df = pd.read_csv(existing[-1], dtype={"expect": str})
+    return str(df["expect"].max()) if not df.empty else '0'
+
+
+# ── 轮询等待今日新数据 ────────────────────────────────────────────────────
+
+def wait_for_new_data(current_year: int) -> list:
+    """
+    每隔 POLL_INTERVAL 秒检查一次今年数据，
+    发现比本地更新的期号立即返回；超时则返回最新已有数据。
+    """
+    local_max = local_latest_expect()
+    deadline  = time.time() + POLL_TIMEOUT
+    attempt   = 0
+
+    print(f"本地最新期号：{local_max}")
+    print(f"开始轮询（每 {POLL_INTERVAL}s 一次，最多等待 {POLL_TIMEOUT//60} 分钟）...")
+
+    while True:
+        attempt += 1
+        records = fetch_year(current_year)
+
+        if records:
+            api_max = max(str(r["expect"]) for r in records)
+            now_str = datetime.now().strftime("%H:%M:%S")
+
+            if api_max > local_max:
+                print(f"  [{now_str}] ✅ 发现新数据！最新期号：{api_max}（第 {attempt} 次检查）")
+                return records
+            else:
+                remaining = int(deadline - time.time())
+                print(f"  [{now_str}] 暂无新数据（API 最新：{api_max}），"
+                      f"{remaining}s 后超时，{POLL_INTERVAL}s 后重试...")
+        else:
+            print(f"  [{datetime.now().strftime('%H:%M:%S')}] API 无响应，重试中...")
+
+        if time.time() >= deadline:
+            print(f"⚠️  已等待 {POLL_TIMEOUT//60} 分钟，超时退出，使用已有数据。")
+            return records or []
+
+        time.sleep(POLL_INTERVAL)
+
+
 # ── 入口 ─────────────────────────────────────────────────────────────────
 
 def main():
@@ -162,10 +217,23 @@ def main():
     date_str     = now.strftime("%Y%m%d")
 
     print(f"=== 特码统计分析系统 · 数据管道  {now.strftime('%Y-%m-%d %H:%M')} ===\n")
-    print(f"拉取范围：{config.START_YEAR} ~ {current_year}")
-    records = fetch_all(config.START_YEAR, current_year)
-    df      = parse(records)
-    path    = export_csv(df, date_str)
+
+    # 先轮询等待今日新数据
+    today_records = wait_for_new_data(current_year)
+
+    # 再拉取完整历史（其他年份直接拉，当年已有）
+    print(f"\n拉取范围：{config.START_YEAR} ~ {current_year}")
+    records = []
+    for year in range(config.START_YEAR, current_year):
+        rows = fetch_year(year)
+        records.extend(rows)
+        print(f"  {year} 年：{len(rows)} 期")
+    records.extend(today_records)
+    print(f"  {current_year} 年：{len(today_records)} 期")
+    print(f"共获取：{len(records)} 条原始记录")
+
+    df   = parse(records)
+    path = export_csv(df, date_str)
 
     print(f"\n完成。数据路径：{path}")
     print("在 analysis.ipynb 中运行 load_data() 即可加载。")
