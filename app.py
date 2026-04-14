@@ -240,18 +240,6 @@ with st.sidebar:
 # 主区域
 # ══════════════════════════════════════════════════════════════════════════
 
-latest_period = df.iloc[-1]
-st.markdown(f"""
-<div class="dashboard-header">
-  <h1>📊 特码统计分析系统</h1>
-  <p>最新期号 {latest_period['expect']} &nbsp;·&nbsp;
-     特码 <strong style="color:#00C9FF">{int(latest_period['special'])}</strong> &nbsp;·&nbsp;
-     截至 {latest_period['openTime'].strftime('%Y-%m-%d')} &nbsp;·&nbsp;
-     共 {len(df_full)} 期历史数据</p>
-</div>
-<div class="warn-box">⚠️ 本系统仅用于历史数据统计分析与学习研究，结果不具备任何预测能力，严禁用于赌博或选号。</div>
-""", unsafe_allow_html=True)
-
 if df is None:
     if IS_CLOUD:
         st.warning('⏳ 数据尚未就绪，请稍后刷新页面。')
@@ -264,6 +252,19 @@ df_full = df.copy()
 if sel_year != '全部':
     df = df[df['openTime'].dt.year == int(sel_year)].reset_index(drop=True)
     st.info(f'📅 当前显示 {sel_year} 年数据（共 {len(df)} 期）')
+
+# ── 顶部 Header（在 df_full 定义之后）────────────────────────────────────
+latest_period = df_full.iloc[-1]
+st.markdown(f"""
+<div class="dashboard-header">
+  <h1>📊 特码统计分析系统</h1>
+  <p>最新期号 {latest_period['expect']} &nbsp;·&nbsp;
+     特码 <strong style="color:#00C9FF">{int(latest_period['special'])}</strong> &nbsp;·&nbsp;
+     截至 {latest_period['openTime'].strftime('%Y-%m-%d')} &nbsp;·&nbsp;
+     共 {len(df_full)} 期历史数据</p>
+</div>
+<div class="warn-box">⚠️ 本系统仅用于历史数据统计分析与学习研究，结果不具备任何预测能力，严禁用于赌博或选号。</div>
+""", unsafe_allow_html=True)
 
 # ── 统计卡片 ─────────────────────────────────────────────────────────────
 specials  = df['special'].values.astype(int)
