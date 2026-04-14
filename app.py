@@ -22,7 +22,26 @@ import config
 # ── 环境检测 ──────────────────────────────────────────────────────────────
 IS_CLOUD = not os.access(os.path.join(os.path.dirname(__file__), 'output'), os.W_OK)
 
-# ── 中文字体 & 深色图表 ───────────────────────────────────────────────────
+# ── 中文字体（云端自动下载 NotoSansSC）────────────────────────────────────
+def _setup_font():
+    import matplotlib.font_manager as fm
+    font_path = Path(__file__).parent / 'NotoSansSC-Regular.ttf'
+    if not font_path.exists():
+        try:
+            import urllib.request
+            url = ('https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/'
+                   'SimplifiedChinese/NotoSansCJKsc-Regular.otf')
+            urllib.request.urlretrieve(url, font_path)
+            fm.fontManager.addfont(str(font_path))
+        except Exception:
+            pass
+    if font_path.exists():
+        fm.fontManager.addfont(str(font_path))
+        matplotlib.rcParams['font.sans-serif'] = ['Noto Sans CJK SC'] + \
+            matplotlib.rcParams['font.sans-serif']
+
+_setup_font()
+
 matplotlib.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'Noto Sans CJK',
                                            'PingFang SC', 'Hiragino Sans GB',
                                            'STHeiti', 'Arial Unicode MS', 'DejaVu Sans']
