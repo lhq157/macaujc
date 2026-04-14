@@ -275,8 +275,8 @@ with tab1:
                       for c in freq_arr]
         ax.bar(range(1, 50), freq_arr, color=bar_colors, width=0.7)
         ax.axhline(avg_freq, color='#F39C12', lw=1.5, linestyle='--',
-                   label=f'理论均值 {avg_freq:.1f}')
-        ax.set_xlabel('号码'); ax.set_ylabel('出现次数')
+                   label=f'Mean {avg_freq:.1f}')
+        ax.set_xlabel('No.'); ax.set_ylabel('Count')
         ax.set_xticks(range(1, 50)); ax.tick_params(axis='x', labelsize=7)
         ax.legend(fontsize=9); ax.grid(axis='y', alpha=0.3)
         fig.patch.set_facecolor('#1A2634')
@@ -348,7 +348,7 @@ with tab2:
             zodiac_list = list(zodiac_cnt.keys())
 
         zod_vals   = [zodiac_cnt.get(z, 0) for z in zodiac_list]
-        zod_labels = [f'{ZODIAC_EMOJI.get(z,"")}{z}' for z in zodiac_list]
+        zod_labels = zodiac_list  # 纯汉字，避免 emoji 在云端变方块
 
         col_zp, col_zt = st.columns([2, 1])
         with col_zp:
@@ -359,8 +359,8 @@ with tab2:
                        for v in zod_vals]
             ax5.bar(zod_labels, zod_vals, color=zcolors, width=0.6)
             ax5.axhline(zod_mean, color='#F39C12', lw=1.5, linestyle='--',
-                        label=f'理论均值 {zod_mean:.1f}')
-            ax5.set_ylabel('出现次数'); ax5.legend(fontsize=9)
+                        label=f'Mean {zod_mean:.1f}')
+            ax5.set_ylabel('Count'); ax5.legend(fontsize=9)
             ax5.grid(axis='y', alpha=0.3)
             fig5.patch.set_facecolor('#1A2634')
             st.pyplot(fig5, width='stretch'); plt.close(fig5)
@@ -459,12 +459,12 @@ with tab3:
         ax7.bar(range(1, 50), gap_arr,
                 color=[gap_color(g) for g in gap_arr], width=0.7)
         ax7.axhline(avg_gap,  color='white',  lw=1.5, linestyle='--',
-                    label=f'均值 {avg_gap:.1f}')
+                    label=f'Mean {avg_gap:.1f}')
         ax7.axhline(warn_thr, color='#F39C12', lw=1, linestyle=':',
-                    label=f'2× 警告 {warn_thr:.0f}')
+                    label=f'2x warn {warn_thr:.0f}')
         ax7.axhline(crit_thr, color='#E74C3C', lw=1, linestyle=':',
-                    label=f'3.5× 严重 {crit_thr:.0f}')
-        ax7.set_xlabel('号码'); ax7.set_ylabel('遗漏期数')
+                    label=f'3.5x crit {crit_thr:.0f}')
+        ax7.set_xlabel('No.'); ax7.set_ylabel('Gap')
         ax7.set_xticks(range(1, 50)); ax7.tick_params(axis='x', labelsize=7)
         ax7.legend(fontsize=8); ax7.grid(axis='y', alpha=0.3)
         fig7.patch.set_facecolor('#1A2634')
@@ -505,7 +505,7 @@ with tab4:
                    for c in freq_win]
         ax8.bar(range(1, 50), freq_win, color=wcolors, width=0.7)
         ax8.axhline(window_n/49, color='#F39C12', lw=1.5, linestyle='--')
-        ax8.set_title(f'近{window_n}期频率分布')
+        ax8.set_title(f'Last {window_n} freq')
         ax8.set_xticks(range(1, 50, 3)); ax8.tick_params(axis='x', labelsize=7)
         ax8.grid(axis='y', alpha=0.3)
         fig8.patch.set_facecolor('#1A2634')
@@ -516,8 +516,8 @@ with tab4:
         ax9.scatter(range(window_n), sp_win,
                     c=sp_win, cmap='RdYlGn_r', s=30, zorder=3)
         ax9.plot(range(window_n), sp_win, color='#2A3F54', lw=0.6, zorder=2)
-        ax9.set_ylim(0, 50); ax9.set_xlabel('期序（最新在右）')
-        ax9.set_title(f'近{window_n}期走势')
+        ax9.set_ylim(0, 50); ax9.set_xlabel('Period (newest right)')
+        ax9.set_title(f'Last {window_n} trend')
         ax9.grid(alpha=0.2)
         fig9.patch.set_facecolor('#1A2634')
         st.pyplot(fig9); plt.close(fig9)
@@ -591,12 +591,12 @@ with tab5:
     if len(all_gaps) > 0:
         fig10, ax10 = plt.subplots(figsize=(10, 3.5))
         ax10.hist(all_gaps, bins=50, density=True,
-                  color='#00C9FF', alpha=0.7, label='实际间隔分布')
+                  color='#00C9FF', alpha=0.7, label='Actual gaps')
         x = np.linspace(0, all_gaps.max(), 200)
         ax10.plot(x, (1/avg_gap) * np.exp(-x/avg_gap),
-                  color='#FF6B6B', lw=2, label=f'理论指数分布（λ=1/{avg_gap:.0f}）')
-        ax10.set_xlabel('间隔期数'); ax10.set_ylabel('密度')
-        ax10.set_title('号码出现间隔分布 vs 理论指数分布')
+                  color='#FF6B6B', lw=2, label=f'Exp dist (λ=1/{avg_gap:.0f})')
+        ax10.set_xlabel('Gap'); ax10.set_ylabel('Density')
+        ax10.set_title('Gap dist vs Exp dist')
         ax10.legend(fontsize=9); ax10.grid(alpha=0.3)
         fig10.patch.set_facecolor('#1A2634')
         st.pyplot(fig10, width='stretch'); plt.close(fig10)
@@ -637,8 +637,8 @@ with tab6:
         ax11.scatter(recent_idx - max(0, n-200), [query_num]*len(recent_idx),
                      color='#FF6B6B', s=60, zorder=3)
         ax11.set_xlim(0, 200); ax11.set_ylim(0, 50)
-        ax11.set_xlabel('近 200 期（最新在右）')
-        ax11.set_title(f'号码 {query_num} 出现位置')
+        ax11.set_xlabel('Last 200 periods')
+        ax11.set_title(f'No.{query_num} positions')
         ax11.grid(alpha=0.3); fig11.patch.set_facecolor('#1A2634')
         st.pyplot(fig11); plt.close(fig11)
 
@@ -647,10 +647,10 @@ with tab6:
             fig12, ax12 = plt.subplots(figsize=(6, 3))
             ax12.hist(gaps_q, bins=20, color='#00C9FF', edgecolor='#1A2634')
             ax12.axvline(avg_gap_q, color='#FF6B6B', lw=1.5,
-                         linestyle='--', label=f'均值 {avg_gap_q:.1f}')
+                         linestyle='--', label=f'Mean {avg_gap_q:.1f}')
             ax12.axvline(49, color='#F39C12', lw=1, linestyle=':',
-                         label='理论 49')
-            ax12.set_xlabel('出现间隔（期）'); ax12.set_title('历史间隔分布')
+                         label='Theory 49')
+            ax12.set_xlabel('Gap (periods)'); ax12.set_title('Gap distribution')
             ax12.legend(fontsize=8); ax12.grid(alpha=0.3)
             fig12.patch.set_facecolor('#1A2634')
             st.pyplot(fig12); plt.close(fig12)
