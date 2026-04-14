@@ -99,7 +99,8 @@ st.markdown("""
   html, body, [class*="css"] {
     font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
   }
-  /* ── Header ── */
+
+  /* ══ Header ══ */
   .dashboard-header {
     background: linear-gradient(135deg, #0D1F35 0%, #0F2744 50%, #152E4A 100%);
     border-radius: 16px; padding: 22px 28px 16px; margin-bottom: 20px;
@@ -111,7 +112,7 @@ st.markdown("""
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
     background: linear-gradient(90deg, transparent, #00C9FF 40%, #7B68EE 70%, transparent);
   }
-  .header-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .header-top  { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .header-title { font-size:20px; font-weight:700; color:#fff; letter-spacing:.3px; }
   .header-title span { color:#00C9FF; }
   .header-meta { display:flex; gap:20px; }
@@ -120,54 +121,159 @@ st.markdown("""
   .header-meta-val.red { color:#FF6B6B; }
   .header-meta-lbl { font-size:10px; color:rgba(224,230,237,0.4); margin-top:3px; letter-spacing:.5px; }
   .header-divider { height:1px; background:rgba(255,255,255,0.06); margin:10px 0 8px; }
-  .header-notice { font-size:11px; color:rgba(224,230,237,0.35); display:flex; align-items:center; gap:6px; }
-  .header-notice::before { content:'⚠'; font-size:10px; opacity:.6; }
-  /* ── Stat Cards ── */
+  .header-notice { font-size:11px; color:rgba(224,230,237,0.32); display:flex; align-items:center; gap:6px; }
+  .header-notice::before { content:'⚠'; font-size:10px; opacity:.55; }
+
+  /* ══ KPI Stat Cards ══ */
   .stat-card {
-    background: linear-gradient(145deg,#1A2E44,#152438); border-radius:12px;
-    padding:18px 14px; text-align:center;
-    border:1px solid rgba(0,201,255,0.12); box-shadow:0 2px 16px rgba(0,0,0,0.3);
+    background: linear-gradient(160deg, #1C2F45 0%, #152438 100%);
+    border-radius: 14px; padding: 18px 14px 16px; text-align: center;
+    border: 1px solid rgba(0,201,255,0.13);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+    transition: transform .15s, box-shadow .15s;
+    position: relative; overflow: hidden;
   }
-  .stat-num { font-size:26px; font-weight:700; color:#00C9FF; line-height:1.1; }
-  .stat-lbl { font-size:10px; color:rgba(224,230,237,0.45); margin-top:6px;
-               text-transform:uppercase; letter-spacing:.8px; }
-  /* ── Section Title ── */
+  .stat-card::after {
+    content:''; position:absolute; top:0; left:0; right:0; height:3px;
+    background: var(--card-accent, linear-gradient(90deg,#00C9FF,#7B68EE));
+    border-radius: 14px 14px 0 0;
+  }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(0,0,0,0.45); }
+  .stat-num { font-size:26px; font-weight:700; color: var(--card-color,#00C9FF); line-height:1.1; }
+  .stat-lbl { font-size:10px; color:rgba(224,230,237,0.42); margin-top:7px;
+               text-transform:uppercase; letter-spacing:.9px; }
+  .stat-sub { font-size:11px; color:rgba(224,230,237,0.38); margin-top:3px; }
+
+  /* ══ Section Header (图表区块标题) ══ */
+  .ch {
+    margin: 20px 0 6px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .ch-title {
+    font-size: 13px; font-weight: 600; color: #E0E6ED;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ch-title .ic { color: #00C9FF; font-size: 14px; }
+  .ch-desc {
+    font-size: 11px; color: rgba(224,230,237,0.4);
+    margin-top: 4px; line-height: 1.6;
+  }
+
+  /* ══ Legacy section-title (保留兼容) ══ */
   .section-title {
-    font-size:14px; font-weight:600; color:#E0E6ED;
-    border-left:3px solid #00C9FF; padding-left:10px; margin:18px 0 12px;
+    font-size: 13px; font-weight: 600; color: #E0E6ED;
+    border-left: 3px solid #00C9FF; padding-left: 10px; margin: 18px 0 10px;
   }
-  /* ── Pass / Fail Pill ── */
-  .pill-pass { display:inline-block; padding:3px 12px; border-radius:20px;
+
+  /* ══ Insight Boxes ══ */
+  .ib {
+    border-radius: 0 8px 8px 0; padding: 9px 14px;
+    margin: 10px 0 6px; font-size: 12px; line-height: 1.75;
+    color: rgba(224,230,237,0.72);
+  }
+  .ib-blue   { background:rgba(0,201,255,0.07);  border-left:3px solid #00C9FF; }
+  .ib-green  { background:rgba(39,174,96,0.07);  border-left:3px solid #27AE60; }
+  .ib-orange { background:rgba(243,156,18,0.07); border-left:3px solid #F39C12; }
+  .ib-red    { background:rgba(231,76,60,0.07);  border-left:3px solid #E74C3C; }
+
+  /* ══ Rank List ══ */
+  .rank-item {
+    display:flex; align-items:center; gap:10px; padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px;
+  }
+  .rank-pos { width:18px; font-size:11px; color:rgba(224,230,237,.28); text-align:center; }
+  .rank-icon { font-size:13px; }
+  .rank-num  { font-weight:700; font-size:14px; min-width:38px; }
+  .rank-bar  {
+    flex:1; height:5px; border-radius:3px; background:rgba(255,255,255,0.06); overflow:hidden;
+  }
+  .rank-fill { height:100%; border-radius:3px; }
+  .rank-cnt  { font-size:12px; color:#E0E6ED; min-width:38px; text-align:right; }
+  .rank-dlt  { font-size:11px; color:rgba(224,230,237,0.32); min-width:34px; text-align:right; }
+  .hot-num   { color:#FF6B6B; }
+  .cold-num  { color:#A0AEC0; }
+
+  /* ══ Check Row (完整性检查) ══ */
+  .check-row {
+    display:flex; align-items:center; gap:10px; padding:8px 12px; margin:4px 0;
+    border-radius:8px; background:rgba(255,255,255,0.025); font-size:12px;
+  }
+  .check-icon { font-size:15px; width:20px; text-align:center; }
+  .check-name { color:rgba(224,230,237,.55); flex:1; }
+  .check-ok   { color:#27AE60; font-weight:600; }
+  .check-fail { color:#E74C3C; font-weight:600; }
+
+  /* ══ Leaderboard Cards (冷热榜) ══ */
+  .lb-card {
+    background: linear-gradient(160deg,#1A2E44,#152438); border-radius:12px;
+    padding:16px 18px; border:1px solid rgba(255,255,255,0.06);
+    box-shadow:0 2px 14px rgba(0,0,0,0.25);
+  }
+  .lb-title { font-size:13px; font-weight:600; color:#E0E6ED; margin-bottom:10px; }
+  .lb-row   { display:flex; align-items:center; justify-content:space-between;
+               padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px; }
+  .lb-row:last-child { border:none; }
+  .lb-tag   { font-size:10px; padding:1px 7px; border-radius:10px; margin-left:4px; }
+  .lb-hot   { background:rgba(255,107,107,.15); color:#FF6B6B; }
+  .lb-cold  { background:rgba(74,85,104,.3);   color:#A0AEC0; }
+  .lb-miss  { background:rgba(243,156,18,.12); color:#F39C12; }
+
+  /* ══ Pass / Fail Pills ══ */
+  .pill-pass { display:inline-block; padding:4px 14px; border-radius:20px;
                background:rgba(39,174,96,.15); color:#27AE60;
                border:1px solid rgba(39,174,96,.3); font-size:12px; font-weight:600; }
-  .pill-fail { display:inline-block; padding:3px 12px; border-radius:20px;
+  .pill-fail { display:inline-block; padding:4px 14px; border-radius:20px;
                background:rgba(231,76,60,.15); color:#E74C3C;
                border:1px solid rgba(231,76,60,.3); font-size:12px; font-weight:600; }
-  /* ── Conclusion Items ── */
-  .concl-item { padding:9px 14px; margin:5px 0; font-size:13px; color:#E0E6ED;
+
+  /* ══ Conclusion Items ══ */
+  .concl-item { padding:10px 14px; margin:6px 0; font-size:13px; color:#E0E6ED;
                 border-radius:8px; background:rgba(255,255,255,0.03);
-                border-left:3px solid rgba(0,201,255,0.4); line-height:1.6; }
-  .concl-item span { color:#00C9FF; font-weight:600; }
-  .concl-warn { border-left-color:rgba(243,156,18,0.6) !important; }
-  .concl-ok   { border-left-color:rgba(39,174,96,0.6) !important; }
-  /* ── Test Box ── */
+                border-left:3px solid rgba(0,201,255,0.4); line-height:1.7; }
+  .concl-item strong { color:#E0E6ED; }
+  .concl-warn { border-left-color:rgba(243,156,18,0.6)  !important; }
+  .concl-ok   { border-left-color:rgba(39,174,96,0.6)   !important; }
+
+  /* ══ Test Box ══ */
   .test-box { background:rgba(255,255,255,0.03); border-radius:12px;
-              padding:18px 20px; border:1px solid rgba(255,255,255,0.07); }
-  .test-title { font-size:14px; font-weight:600; color:#E0E6ED; margin-bottom:13px; }
-  .test-row { display:flex; justify-content:space-between; padding:5px 0;
+              padding:18px 20px; border:1px solid rgba(255,255,255,0.07); height:100%; }
+  .test-title { font-size:14px; font-weight:600; color:#E0E6ED; margin-bottom:14px; }
+  .test-row { display:flex; justify-content:space-between; padding:6px 0;
               border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px; }
   .test-key { color:rgba(224,230,237,0.5); }
   .test-val { color:#E0E6ED; font-weight:500; }
-  /* ── Report Card ── */
+
+  /* ══ Report Card ══ */
   .report-card { background:rgba(0,201,255,0.04); border-radius:12px;
                  padding:18px 22px; border:1px solid rgba(0,201,255,0.1); margin-bottom:12px; }
   .report-card h4 { color:#00C9FF; margin:0 0 10px; font-size:14px; }
   .report-card p  { font-size:13px; color:#E0E6ED; margin:5px 0; line-height:1.7; }
-  /* ── Sidebar & Misc ── */
+
+  /* ══ Anomaly KPI variant ══ */
+  .anom-card {
+    border-radius:12px; padding:16px 14px; text-align:center;
+    border:1px solid; box-shadow:0 2px 16px rgba(0,0,0,0.3);
+  }
+  .anom-num { font-size:30px; font-weight:700; line-height:1.1; }
+  .anom-lbl { font-size:10px; margin-top:6px; text-transform:uppercase; letter-spacing:.8px;
+               opacity:.6; }
+
+  /* ══ Summary eval box ══ */
+  .eval-box {
+    border-radius:12px; padding:18px 22px;
+    border:1px solid rgba(255,255,255,0.07);
+    background:rgba(255,255,255,0.025);
+  }
+  .eval-title { font-size:15px; font-weight:600; margin-bottom:8px; }
+  .eval-body  { font-size:12px; color:rgba(224,230,237,0.55); line-height:1.8; }
+
+  /* ══ Sidebar & misc ══ */
   section[data-testid="stSidebar"] { background:#111D2C !important;
     border-right:1px solid rgba(0,201,255,0.08); }
   #MainMenu, footer { visibility:hidden; }
   header[data-testid="stHeader"] { background:transparent; }
+  div[data-testid="stDataFrame"] { border-radius:10px; overflow:hidden; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -244,13 +350,90 @@ def compute_zodiac(df: pd.DataFrame) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# 3b. HTML UI 辅助函数（卡片标题、洞察框、排行榜、KPI卡片）
+# ══════════════════════════════════════════════════════════════════════════
+
+def ch(title: str, desc: str = '', icon: str = '') -> str:
+    """生成图表区块标题 HTML（含图标 + 副标题说明）"""
+    ic   = f'<span class="ic">{icon}</span>' if icon else ''
+    sub  = f'<div class="ch-desc">{desc}</div>' if desc else ''
+    return (f'<div class="ch"><div class="ch-title">{ic}{title}</div>{sub}</div>')
+
+
+def ib(text: str, color: str = 'blue') -> str:
+    """生成洞察/说明文字框 HTML（blue / green / orange / red）"""
+    return f'<div class="ib ib-{color}">{text}</div>'
+
+
+def stat_card_html(val: str, lbl: str, sub: str = '',
+                   accent: str = '#00C9FF', grad: str = '') -> str:
+    """生成彩色顶部条 KPI 卡片 HTML"""
+    grad_css = grad if grad else f'linear-gradient(90deg,{accent},{accent}88)'
+    color_css = accent
+    sub_html  = (f'<div class="stat-sub">{sub}</div>' if sub else '')
+    return (
+        f'<div class="stat-card" style="--card-accent:{grad_css};--card-color:{color_css}">'
+        f'<div class="stat-num">{val}</div>'
+        f'<div class="stat-lbl">{lbl}</div>'
+        f'{sub_html}</div>'
+    )
+
+
+def rank_html(items: list, max_val: float, hot: bool = True) -> str:
+    """生成内联排行榜 HTML
+    items: [(num, count), ...]  max_val: 用于计算进度条宽度
+    hot=True → 红色，hot=False → 冷色
+    """
+    bar_color = '#FF6B6B' if hot else '#4A5568'
+    num_cls   = 'hot-num' if hot else 'cold-num'
+    icon      = '🔥' if hot else '🧊'
+    rows = ''
+    for i, (num, cnt) in enumerate(items, 1):
+        pct   = cnt / max(max_val, 1) * 100
+        delta = cnt - (max_val / len(items) if len(items) else 1)
+        sign  = '+' if delta >= 0 else ''
+        rows += (
+            f'<div class="rank-item">'
+            f'<span class="rank-pos">{i}</span>'
+            f'<span class="rank-icon">{icon}</span>'
+            f'<span class="rank-num {num_cls}">No.{num:02d}</span>'
+            f'<div class="rank-bar"><div class="rank-fill" '
+            f'style="width:{pct:.0f}%;background:{bar_color}"></div></div>'
+            f'<span class="rank-cnt">{cnt}次</span>'
+            f'<span class="rank-dlt">{sign}{delta:.0f}</span>'
+            f'</div>'
+        )
+    return rows
+
+
+def lb_card_html(title: str, items: list, tag_cls: str, fmt_fn) -> str:
+    """生成冷热榜卡片 HTML
+    items: [(num, val), ...]  fmt_fn(num, val) → right-side text
+    """
+    rows = ''
+    for num, val in items:
+        rows += (
+            f'<div class="lb-row">'
+            f'<span style="color:#E0E6ED;font-weight:600">No.{num:02d}</span>'
+            f'<span><span class="lb-tag {tag_cls}">{fmt_fn(num, val)}</span></span>'
+            f'</div>'
+        )
+    return f'<div class="lb-card"><div class="lb-title">{title}</div>{rows}</div>'
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # 4. 绘图函数（统一暗色风格，均返回 matplotlib figure）
 # ══════════════════════════════════════════════════════════════════════════
 
 def _fig(w: float, h: float):
-    """创建统一背景的 figure/ax"""
+    """创建统一背景的 figure/ax（仅保留左/下坐标轴，移除上/右刺线）"""
     fig, ax = plt.subplots(figsize=(w, h))
     fig.patch.set_facecolor(PALETTE['bg'])
+    # 去除上/右刺线，保留左/下（更简洁专业）
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#2A3F54')
+    ax.spines['bottom'].set_color('#2A3F54')
     return fig, ax
 
 
@@ -867,57 +1050,72 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 # Tab 1 — 数据概览
 # ────────────────────────────────────────────────────────────────────────
 with tab1:
-    st.markdown('<div class="section-title">数据总览</div>', unsafe_allow_html=True)
+    # ── KPI 卡片（5 列，各有专属强调色）
+    st.markdown(ch('数据总览', '当前筛选范围内的基础统计指标', '📋'), unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns(5)
-    kpi_data = [
-        (str(n),       '总期数'),
-        (f'{df_full["openTime"].min().year}–{df_full["openTime"].max().year}', '数据年份'),
-        (df_full['openTime'].min().strftime('%y/%m/%d'), '起始日期'),
-        (df_full['openTime'].max().strftime('%y/%m/%d'), '最新日期'),
-        (str(df_full['openTime'].dt.date.nunique()), '有效期数'),
+    yr_range = f'{df_full["openTime"].min().year}–{df_full["openTime"].max().year}'
+    kpi_cards = [
+        (str(n),                                             '总  期  数',    '',   '#00C9FF', 'linear-gradient(90deg,#00C9FF,#7B68EE)'),
+        (yr_range,                                           '数据年份',       '',   '#9B59B6', 'linear-gradient(90deg,#9B59B6,#7B68EE)'),
+        (df_full['openTime'].min().strftime('%y/%m/%d'),     '起始日期',       '',   '#27AE60', 'linear-gradient(90deg,#27AE60,#00C9FF)'),
+        (df_full['openTime'].max().strftime('%y/%m/%d'),     '最新日期',       '',   '#F39C12', 'linear-gradient(90deg,#F39C12,#E67E22)'),
+        (str(df_full['openTime'].dt.date.nunique()),         '有效期数',       '',   '#00C9FF', 'linear-gradient(90deg,#00C9FF,#27AE60)'),
     ]
-    for col, (val, lbl) in zip([c1, c2, c3, c4, c5], kpi_data):
+    for col, (val, lbl, sub, accent, grad) in zip([c1, c2, c3, c4, c5], kpi_cards):
         with col:
-            st.markdown(
-                f'<div class="stat-card"><div class="stat-num">{val}</div>'
-                f'<div class="stat-lbl">{lbl}</div></div>',
-                unsafe_allow_html=True
-            )
+            st.markdown(stat_card_html(val, lbl, sub, accent, grad), unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">数据完整性检查</div>', unsafe_allow_html=True)
-    col_qa, col_qb = st.columns(2)
+
+    # ── 完整性检查 + 年度分布（两列）
+    st.markdown(ch('数据完整性检查', '自动验证字段完整性、期号唯一性、数值合法性', '🔍'),
+                unsafe_allow_html=True)
+    col_qa, col_qb = st.columns([3, 2])
 
     with col_qa:
-        req_cols   = ['expect', 'openTime', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'special']
-        miss_cols  = [c for c in req_cols if c not in df_full.columns]
-        dup_cnt    = df_full.duplicated(subset='expect').sum()
-        null_cnt   = df_full['special'].isna().sum()
-        range_bad  = int(((df_full['special'] < 1) | (df_full['special'] > 49)).sum())
-
+        req_cols  = ['expect', 'openTime', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'special']
+        miss_cols = [c for c in req_cols if c not in df_full.columns]
+        dup_cnt   = df_full.duplicated(subset='expect').sum()
+        null_cnt  = df_full['special'].isna().sum()
+        range_bad = int(((df_full['special'] < 1) | (df_full['special'] > 49)).sum())
         checks = [
-            ('必要字段完整', '✅ 通过' if not miss_cols else f'❌ 缺少 {miss_cols}', not miss_cols),
-            ('期号重复',   f'✅ 无重复'       if dup_cnt == 0   else f'⚠️ {dup_cnt} 条', dup_cnt == 0),
-            ('特码空值',   f'✅ 无空值'       if null_cnt == 0  else f'❌ {null_cnt} 条', null_cnt == 0),
-            ('号码范围 1-49', f'✅ 全部合法'   if range_bad == 0 else f'❌ {range_bad} 条越界', range_bad == 0),
+            ('✅', '必要字段完整', '通过'         if not miss_cols else f'缺少 {miss_cols}', not miss_cols),
+            ('✅' if dup_cnt  == 0 else '⚠️', '期号唯一性', '无重复'     if dup_cnt  == 0 else f'{dup_cnt} 条重复',   dup_cnt  == 0),
+            ('✅' if null_cnt == 0 else '❌', '特码空值',   '无空值'     if null_cnt == 0 else f'{null_cnt} 条空值',  null_cnt == 0),
+            ('✅' if range_bad== 0 else '❌', '号码范围 1-49', '全部合法' if range_bad== 0 else f'{range_bad} 条越界', range_bad== 0),
         ]
-        for name, result, passed in checks:
-            color = '#27AE60' if passed else '#E74C3C'
-            st.markdown(
-                f'<div style="padding:6px 0;font-size:13px;">'
-                f'<span style="color:rgba(224,230,237,.5);">{name}</span>'
-                f'&ensp;<span style="color:{color};font-weight:600">{result}</span></div>',
-                unsafe_allow_html=True
+        rows_html = ''
+        for icon, name, result, passed in checks:
+            cls  = 'check-ok' if passed else 'check-fail'
+            rows_html += (
+                f'<div class="check-row">'
+                f'<span class="check-icon">{icon}</span>'
+                f'<span class="check-name">{name}</span>'
+                f'<span class="{cls}">{result}</span></div>'
             )
+        st.markdown(rows_html, unsafe_allow_html=True)
 
     with col_qb:
-        st.markdown('**各年期数**')
+        st.markdown(ch('各年期数分布', '', '📅'), unsafe_allow_html=True)
         year_cnt = df_full.groupby(df_full['openTime'].dt.year).size()
+        rows_y = ''
+        max_y  = year_cnt.max()
         for yr, cnt in year_cnt.items():
-            st.markdown(f'`{yr}` — **{cnt}** 期 ({cnt/n*100:.1f}%)')
+            pct = cnt / max_y * 100
+            rows_y += (
+                f'<div style="display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12px">'
+                f'<span style="color:rgba(224,230,237,.5);width:38px">{yr}</span>'
+                f'<div style="flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden">'
+                f'<div style="width:{pct:.0f}%;height:100%;background:linear-gradient(90deg,#00C9FF,#7B68EE);border-radius:3px"></div></div>'
+                f'<span style="color:#E0E6ED;font-weight:600;width:38px;text-align:right">{cnt}</span>'
+                f'<span style="color:rgba(224,230,237,.35);width:38px">({cnt/n*100:.0f}%)</span>'
+                f'</div>'
+            )
+        st.markdown(rows_y, unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">最新 10 期开奖记录</div>', unsafe_allow_html=True)
+    st.markdown(ch('最新 10 期开奖记录', '按时间倒序展示，包含正码与特码', '📅'),
+                unsafe_allow_html=True)
     show_cols = [c for c in ['expect', 'openTime', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'special', 'zodiac']
                  if c in df_full.columns]
     st.dataframe(
@@ -930,37 +1128,68 @@ with tab1:
 # Tab 2 — 分布分析
 # ────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.markdown('<div class="section-title">号码频率分布</div>', unsafe_allow_html=True)
+    # ── 频率柱状图 + 排行榜
+    st.markdown(ch('号码频率分布',
+                   '统计 1–49 各号码在历史数据中的出现次数；红色=最高频，灰色=最低频，橙色虚线=理论均值',
+                   '📊'), unsafe_allow_html=True)
     col_ch, col_info = st.columns([3, 1])
+    top5 = sorted(enumerate(freq_arr, 1), key=lambda x: x[1], reverse=True)[:5]
+    bot5 = sorted(enumerate(freq_arr, 1), key=lambda x: x[1])[:5]
     with col_ch:
         st.pyplot(fig_freq_bar(freq_arr, avg_freq), use_container_width=True)
         plt.close('all')
     with col_info:
-        top5 = sorted(enumerate(freq_arr, 1), key=lambda x: x[1], reverse=True)[:5]
-        bot5 = sorted(enumerate(freq_arr, 1), key=lambda x: x[1])[:5]
-        st.markdown('**🔥 最热号码**')
-        for num, cnt in top5:
-            st.markdown(f'`{num:2d}` — **{cnt}** 次 `{cnt-avg_freq:+.0f}`')
-        st.markdown('**🧊 最冷号码**')
-        for num, cnt in bot5:
-            st.markdown(f'`{num:2d}` — {cnt} 次 `{cnt-avg_freq:+.0f}`')
+        st.markdown(
+            '<div style="font-size:12px;font-weight:600;color:#FF6B6B;margin-bottom:4px">🔥 最热号码</div>'
+            + rank_html(top5, freq_arr.max(), hot=True),
+            unsafe_allow_html=True
+        )
+        st.markdown(
+            '<div style="font-size:12px;font-weight:600;color:#A0AEC0;margin:12px 0 4px">🧊 最冷号码</div>'
+            + rank_html(bot5, freq_arr.max(), hot=False),
+            unsafe_allow_html=True
+        )
+
+    st.markdown(ib(f'理论均值：每个号码应出现约 <strong>{avg_freq:.1f}</strong> 次。'
+                   f'当前标准差 {freq_arr.std():.2f}，'
+                   f'最高频 No.{int(np.argmax(freq_arr))+1}（{freq_arr.max():.0f}次），'
+                   f'最低频 No.{int(np.argmin(freq_arr))+1}（{freq_arr.min():.0f}次）。'
+                   f'偏差在统计正常范围内不代表规律。'),
+                unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">号码热力图（7×7 布局）</div>', unsafe_allow_html=True)
-    col_hm, col_hm2 = st.columns([2, 1])
+
+    # ── 热力图 + 指标卡片
+    st.markdown(ch('号码热力图（7×7 布局）',
+                   '颜色越深表示出现次数越多；直观定位高频/低频号码区域', '🌡️'),
+                unsafe_allow_html=True)
+    col_hm, col_hm2 = st.columns([5, 2])
+    max_num = int(np.argmax(freq_arr)) + 1
+    min_num = int(np.argmin(freq_arr)) + 1
     with col_hm:
         st.pyplot(fig_heatmap(freq_arr), use_container_width=True)
         plt.close('all')
     with col_hm2:
-        max_num = int(np.argmax(freq_arr)) + 1
-        min_num = int(np.argmin(freq_arr)) + 1
-        st.metric('最高频号码', f'No.{max_num}', f'{freq_arr[max_num-1]:.0f} 次')
-        st.metric('最低频号码', f'No.{min_num}', f'{freq_arr[min_num-1]:.0f} 次')
-        st.metric('理论均值',   f'{avg_freq:.1f} 次')
-        st.metric('频率标准差', f'{freq_arr.std():.2f}')
+        st.markdown('<br>', unsafe_allow_html=True)
+        cards_hm = [
+            (f'No.{max_num}', '最高频号码', f'{freq_arr[max_num-1]:.0f} 次', '#FF6B6B',
+             'linear-gradient(90deg,#FF6B6B,#F39C12)'),
+            (f'No.{min_num}', '最低频号码', f'{freq_arr[min_num-1]:.0f} 次', '#4A5568',
+             'linear-gradient(90deg,#4A5568,#2A3F54)'),
+            (f'{avg_freq:.1f}', '理论均值（次）', '', '#27AE60',
+             'linear-gradient(90deg,#27AE60,#00C9FF)'),
+            (f'{freq_arr.std():.2f}', '标准差', '', '#9B59B6',
+             'linear-gradient(90deg,#9B59B6,#7B68EE)'),
+        ]
+        for v, l, s, ac, gr in cards_hm:
+            st.markdown(stat_card_html(v, l, s, ac, gr), unsafe_allow_html=True)
+            st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">结构分布（奇偶 / 大小 / 尾数）</div>',
+
+    # ── 结构分布（奇偶 / 大小 / 尾数）
+    st.markdown(ch('结构分布',
+                   '从奇偶、大小（以24为界）、个位尾数三个维度分析特码的统计特征', '🔢'),
                 unsafe_allow_html=True)
     co1, co2, co3 = st.columns(3)
     odd_cnt = int(np.sum(specials % 2 == 1))
@@ -970,6 +1199,11 @@ with tab2:
                           [PALETTE['blue'], PALETTE['red']], '奇偶分布'),
                   use_container_width=True)
         plt.close('all')
+        odd_pct = odd_cnt / n * 100
+        color   = '#27AE60' if 44 < odd_pct < 56 else '#F39C12'
+        st.markdown(ib(f'奇数占比 <strong style="color:{color}">{odd_pct:.1f}%</strong>'
+                       f'（理论 50%），{"接近均衡" if 44 < odd_pct < 56 else "存在偏差"}'),
+                    unsafe_allow_html=True)
     with co2:
         st.pyplot(fig_pie([big_cnt, n - big_cnt],
                           [f'大(>{config.BIG_NUMBER_THRESHOLD})',
@@ -977,9 +1211,16 @@ with tab2:
                           [PALETTE['orange'], PALETTE['green']], '大小分布'),
                   use_container_width=True)
         plt.close('all')
+        big_pct = big_cnt / n * 100
+        st.markdown(ib(f'大号（>24）占比 <strong>{big_pct:.1f}%</strong>'
+                       f'（理论 51.0%，大号25个）'), unsafe_allow_html=True)
     with co3:
         st.pyplot(fig_tail_bar(specials, n), use_container_width=True)
         plt.close('all')
+        tail_cnt   = Counter((specials % 10).tolist())
+        max_tail   = max(tail_cnt, key=tail_cnt.get)
+        st.markdown(ib(f'尾数 <strong>{max_tail}</strong> 出现最多（{tail_cnt[max_tail]}次），'
+                       f'均值 {n/10:.1f} 次/尾数'), unsafe_allow_html=True)
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -999,90 +1240,173 @@ with tab3:
             zc_show = zodiac_cnt
 
         zod_mean = n / 12
+        top1_z   = max(zodiac_cnt, key=zodiac_cnt.get)
+        bot1_z   = min(zodiac_cnt, key=zodiac_cnt.get)
 
-        st.markdown('<div class="section-title">生肖频率分布</div>', unsafe_allow_html=True)
+        # ── 生肖频率柱状图 + 排名
+        st.markdown(ch('生肖频率分布',
+                       f'12 生肖在历史数据中的出现次数；理论均值 {zod_mean:.1f} 次（n/12）', '🐲'),
+                    unsafe_allow_html=True)
         col_zp, col_zt = st.columns([3, 1])
         with col_zp:
             highlight = sel_zodiac if display_mode == '单生肖' else None
             st.pyplot(fig_zodiac_bar(zc_show, highlight), use_container_width=True)
             plt.close('all')
         with col_zt:
-            st.markdown('**频次排名（全部）**')
-            for z, v in sorted(zodiac_cnt.items(), key=lambda x: x[1], reverse=True):
+            rows_z = ''
+            for i, (z, v) in enumerate(
+                    sorted(zodiac_cnt.items(), key=lambda x: x[1], reverse=True), 1):
                 delta = v - zod_mean
                 sign  = '+' if delta >= 0 else ''
                 emoji = ZODIAC_EMOJI.get(z, '')
-                st.markdown(f'{emoji} **{z}** — {v}次 `{sign}{delta:.0f}`')
+                is_top = (i == 1)
+                num_color = '#FF6B6B' if is_top else ('#4A5568' if i == len(zodiac_cnt) else '#E0E6ED')
+                rows_z += (
+                    f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;'
+                    f'border-bottom:1px solid rgba(255,255,255,.04);font-size:12px">'
+                    f'<span style="color:rgba(224,230,237,.28);width:14px">{i}</span>'
+                    f'<span style="font-size:14px">{emoji}</span>'
+                    f'<span style="font-weight:600;color:{num_color};flex:1">{z}</span>'
+                    f'<span style="color:#E0E6ED">{v}次</span>'
+                    f'<span style="color:rgba(224,230,237,.32);font-size:11px;min-width:28px;text-align:right">'
+                    f'{sign}{delta:.0f}</span></div>'
+                )
+            st.markdown(rows_z, unsafe_allow_html=True)
+
+        st.markdown(ib(f'最高频：{ZODIAC_EMOJI.get(top1_z,"")}<strong>{top1_z}</strong>'
+                       f'（{zodiac_cnt[top1_z]}次），'
+                       f'最低频：{ZODIAC_EMOJI.get(bot1_z,"")}<strong>{bot1_z}</strong>'
+                       f'（{zodiac_cnt[bot1_z]}次），差值 {zodiac_cnt[top1_z]-zodiac_cnt[bot1_z]} 次。'
+                       f'属正常统计波动，不代表某生肖"更容易"出现。'),
+                    unsafe_allow_html=True)
 
         st.markdown('<br>', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">月度趋势（Top 6 生肖）</div>',
+
+        # ── 月度趋势
+        st.markdown(ch('月度趋势（Top 6 生肖）',
+                       '按月统计各生肖出现次数，观察是否存在周期性波动', '📈'),
                     unsafe_allow_html=True)
         st.pyplot(fig_monthly_trend(df_full), use_container_width=True)
         plt.close('all')
+        st.markdown(ib('折线波动属正常短期随机涨落，不存在统计意义上的周期规律。',
+                       'blue'), unsafe_allow_html=True)
 
         st.markdown('<br>', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">多窗口对比（近 50 / 100 / 200 / 全量）</div>',
+
+        # ── 多窗口对比
+        st.markdown(ch('多窗口对比',
+                       '近 50 / 100 / 200 期与全量数据的生肖占比对比，观察短期分布是否稳定', '🔄'),
                     unsafe_allow_html=True)
         table_rows = []
         for z in sorted(zodiac_cnt, key=zodiac_cnt.get, reverse=True):
             row = {'生肖': f'{ZODIAC_EMOJI.get(z,"")}{z}'}
             for w in [50, 100, 200]:
-                wc      = Counter(df_full.tail(w)['zodiac'].tolist())
-                cnt_w   = wc.get(z, 0)
+                wc    = Counter(df_full.tail(w)['zodiac'].tolist())
+                cnt_w = wc.get(z, 0)
                 row[f'近{w}期'] = f'{cnt_w} ({cnt_w/w*100:.0f}%)'
             row['全量'] = f'{zodiac_cnt.get(z, 0)} ({zodiac_cnt.get(z,0)/n*100:.1f}%)'
             table_rows.append(row)
-        st.dataframe(pd.DataFrame(table_rows).set_index('生肖'),
-                     use_container_width=True)
+        st.dataframe(pd.DataFrame(table_rows).set_index('生肖'), use_container_width=True)
 
         st.markdown('<br>', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">生肖 × 奇偶 组合分析</div>',
+
+        # ── 生肖 × 奇偶
+        st.markdown(ch('生肖 × 奇偶 组合分析',
+                       '各生肖在奇数（蓝）与偶数（橙）特码中的出现次数分布', '⊕'),
                     unsafe_allow_html=True)
         fig_zo = fig_zodiac_odd(df_full)
         if fig_zo:
             st.pyplot(fig_zo, use_container_width=True)
             plt.close('all')
+        st.markdown(ib('奇偶组合差异属随机波动，不应据此推断某生肖偏好奇数或偶数特码。',
+                       'orange'), unsafe_allow_html=True)
 
 
 # ────────────────────────────────────────────────────────────────────────
 # Tab 4 — 时序分析
 # ────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.markdown('<div class="section-title">各号码当前遗漏期数</div>', unsafe_allow_html=True)
-    col_gp, col_ga = st.columns([3, 1])
     anom_list = [(i+1, int(gap_arr[i])) for i in range(49) if gap_arr[i] >= warn_thr]
     anom_list.sort(key=lambda x: x[1], reverse=True)
 
+    # ── 遗漏期数柱状图 + 摘要卡片
+    st.markdown(ch('各号码当前遗漏期数',
+                   f'遗漏 = 距上次出现的间隔期数；橙线=2×均值（预警），红线=3.5×均值（危险）；均值≈{avg_freq:.0f}期',
+                   '⏱'), unsafe_allow_html=True)
+    col_gp, col_ga = st.columns([3, 1])
     with col_gp:
         st.pyplot(fig_gap_bar(gap_arr, avg_freq), use_container_width=True)
         plt.close('all')
     with col_ga:
-        st.metric('最长遗漏', f'{int(gap_arr.max())} 期', f'No.{int(gap_arr.argmax())+1}')
-        st.metric('平均遗漏', f'{avg_freq:.1f} 期')
-        st.metric('遗漏异常数', f'{len(anom_list)} 个', delta_color='inverse')
+        st.markdown('<br>', unsafe_allow_html=True)
+        max_gap_num = int(gap_arr.argmax()) + 1
+        gap_cards = [
+            (f'{int(gap_arr.max())}期', '最长遗漏', f'No.{max_gap_num}',
+             '#FF6B6B', 'linear-gradient(90deg,#FF6B6B,#F39C12)'),
+            (f'{avg_freq:.1f}期', '理论均值', '49期/号', '#00C9FF',
+             'linear-gradient(90deg,#00C9FF,#7B68EE)'),
+            (f'{len(anom_list)}个', '遗漏异常', f'>{warn_thr:.0f}期', '#F39C12',
+             'linear-gradient(90deg,#F39C12,#E67E22)'),
+        ]
+        for v, l, s, ac, gr in gap_cards:
+            st.markdown(stat_card_html(v, l, s, ac, gr), unsafe_allow_html=True)
+            st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
         if anom_list:
-            st.markdown('**异常号码**')
-            for num, gap in anom_list[:7]:
-                tag = '🔴' if gap >= crit_thr else '🟡'
-                st.markdown(f'{tag} `{num:2d}` — {gap}期 ×{gap/avg_freq:.1f}')
+            rows_a = ''
+            for num, gap in anom_list[:6]:
+                tag   = '🔴' if gap >= crit_thr else '🟡'
+                mult  = gap / avg_freq
+                rows_a += (
+                    f'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;'
+                    f'border-bottom:1px solid rgba(255,255,255,.04);font-size:11px">'
+                    f'<span>{tag}</span>'
+                    f'<span style="font-weight:700;color:#E0E6ED">No.{num:02d}</span>'
+                    f'<span style="margin-left:auto;color:rgba(224,230,237,.6)">{gap}期</span>'
+                    f'<span style="color:rgba(224,230,237,.35)">×{mult:.1f}</span></div>'
+                )
+            st.markdown(
+                f'<div style="margin-top:10px;font-size:11px;font-weight:600;color:#F39C12;'
+                f'margin-bottom:4px">⚠️ 异常号码</div>' + rows_a,
+                unsafe_allow_html=True
+            )
+
+    st.markdown(ib('遗漏期数仅反映统计状态，对独立随机事件无预测价值。'
+                   '长遗漏不代表"即将出现"，彩票每期开奖互相独立。'), unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">间隔分布 vs 理论指数分布</div>',
-                unsafe_allow_html=True)
+
+    # ── 间隔分布
     if len(all_gaps) > 0:
+        st.markdown(ch('间隔分布 vs 理论指数分布',
+                       '若开奖独立随机，间隔应服从指数分布（红线）；蓝色直方图=实际数据', '📐'),
+                    unsafe_allow_html=True)
         st.pyplot(fig_gap_hist(all_gaps, avg_freq), use_container_width=True)
         plt.close('all')
+        st.markdown(ib(f'实际间隔分布{"接近" if ks_pass else "偏离"}理论指数分布'
+                       f'（KS检验 p={ks_p:.3f}），'
+                       + ('支持各期独立假设。' if ks_pass else '但不代表存在可利用的规律。'),
+                       'green' if ks_pass else 'orange'), unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">单号码滑动窗口频率分析</div>',
+
+    # ── 单号码滚动窗口
+    st.markdown(ch('单号码滑动窗口频率',
+                   '在连续 N 期的滑动窗口内统计目标号码的频率变化；红色填充=高于均值，蓝色=低于均值', '🔍'),
                 unsafe_allow_html=True)
     roll_num = st.number_input('选择号码（1–49）', min_value=1, max_value=49,
                                value=1, step=1, key='roll_num')
     st.pyplot(fig_rolling_freq(specials, window_n, roll_num), use_container_width=True)
     plt.close('all')
+    q_cnt = Counter(specials.tolist()).get(roll_num, 0)
+    st.markdown(ib(f'No.{roll_num} 全量出现 <strong>{q_cnt}</strong> 次'
+                   f'（理论均值 {avg_freq:.1f} 次，偏差 {q_cnt-avg_freq:+.1f}）。'
+                   f'频率波动属正常随机涨落，与窗口选取有关。'), unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown(f'<div class="section-title">近 {window_n} 期冷热榜</div>',
+
+    # ── 冷热榜（3列卡片）
+    st.markdown(ch(f'近 {window_n} 期冷热榜',
+                   '基于当前滑动窗口统计的热号、冷号与长遗漏号码', '🏆'),
                 unsafe_allow_html=True)
     sp_win   = df_full.tail(window_n)['special'].values.astype(int)
     freq_win = np.array([Counter(sp_win.tolist()).get(i, 0) for i in range(1, 50)])
@@ -1090,27 +1414,33 @@ with tab4:
     cold5    = sorted(enumerate(freq_win, 1), key=lambda x: x[1])[:5]
     miss5    = sorted([(i+1, int(gap_arr[i])) for i in range(49)],
                       key=lambda x: x[1], reverse=True)[:5]
-
     cw1, cw2, cw3 = st.columns(3)
     with cw1:
-        st.markdown(f'**🔥 近{window_n}期最热**')
-        for num, cnt in hot5:
-            st.markdown(f'`{num:2d}` — **{cnt}** 次')
+        st.markdown(
+            lb_card_html(f'🔥 近{window_n}期最热', hot5, 'lb-hot',
+                         lambda num, v: f'{v}次'),
+            unsafe_allow_html=True
+        )
     with cw2:
-        st.markdown(f'**🧊 近{window_n}期最冷**')
-        for num, cnt in cold5:
-            st.markdown(f'`{num:2d}` — **{cnt}** 次')
+        st.markdown(
+            lb_card_html(f'🧊 近{window_n}期最冷', cold5, 'lb-cold',
+                         lambda num, v: f'{v}次'),
+            unsafe_allow_html=True
+        )
     with cw3:
-        st.markdown('**⏳ 当前遗漏最长**')
-        for num, gap in miss5:
-            st.markdown(f'`{num:2d}` — **{gap}** 期')
+        st.markdown(
+            lb_card_html('⏳ 当前遗漏最长', miss5, 'lb-miss',
+                         lambda num, v: f'{v}期'),
+            unsafe_allow_html=True
+        )
 
 
 # ────────────────────────────────────────────────────────────────────────
 # Tab 5 — 统计检验
 # ────────────────────────────────────────────────────────────────────────
 with tab5:
-    st.markdown('<div class="section-title">① 卡方均匀性检验 & KS 间隔检验</div>',
+    st.markdown(ch('① 卡方均匀性检验 & KS 间隔检验',
+                   '卡方检验验证号码分布是否均匀；KS检验验证出现间隔是否服从指数分布（独立性）', '🔬'),
                 unsafe_allow_html=True)
     col_t1, col_t2 = st.columns(2)
 
@@ -1171,12 +1501,15 @@ with tab5:
 
     st.markdown('<br>', unsafe_allow_html=True)
     if len(all_gaps) > 0:
-        st.markdown('<div class="section-title">间隔分布拟合图</div>', unsafe_allow_html=True)
+        st.markdown(ch('间隔分布拟合图',
+                       '若号码独立随机出现，间隔应符合指数分布（无记忆性）', '📐'),
+                    unsafe_allow_html=True)
         st.pyplot(fig_gap_hist(all_gaps, avg_freq), use_container_width=True)
         plt.close('all')
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">② 自相关检验（序列独立性）</div>',
+    st.markdown(ch('② 自相关检验（序列独立性）',
+                   f'检验相邻期特码是否存在线性相关；超出虚线（95% CI ±{conf_interval:.3f}）才认为显著', '📉'),
                 unsafe_allow_html=True)
     pill_acf = (
         f'<span class="pill-pass">✅ 自相关均在 95% CI 内（{acf_lags} 个滞后全部正常）</span>'
@@ -1209,20 +1542,35 @@ with tab5:
 
     st.markdown('<br>', unsafe_allow_html=True)
     summary_color = '#27AE60' if pass_cnt == 3 else ('#F39C12' if pass_cnt >= 2 else '#E74C3C')
+    summary_bg    = ('rgba(39,174,96,0.07)'  if pass_cnt == 3 else
+                     'rgba(243,156,18,0.07)' if pass_cnt >= 2 else
+                     'rgba(231,76,60,0.07)')
+    summary_border = summary_color
     summary_text  = (
-        '全部通过，数据整体符合随机均匀分布特征，与彩票纯随机机制理论一致。历史数据对未来无任何预测价值。'
+        '全部通过。数据整体符合随机均匀分布特征，与彩票纯随机机制理论一致。'
+        '历史数据对未来无任何预测价值。'
         if pass_cnt == 3 else
-        '部分通过，可能由样本量、短期波动或随机误差引起。彩票开奖是独立随机事件，历史数据无预测能力。'
+        '部分通过，可能由样本量不足、短期波动或统计误差引起。'
+        '彩票开奖是独立随机事件，历史数据无预测能力。'
     )
+    # 生成三项检验的 mini 徽章
+    badges = ''
+    for label, passed in [('卡方', chi2_pass), ('KS间隔', ks_pass), ('自相关', acf_exceed == 0)]:
+        bg  = 'rgba(39,174,96,.15)'  if passed else 'rgba(243,156,18,.15)'
+        col = '#27AE60' if passed else '#F39C12'
+        icon = '✅' if passed else '⚠️'
+        badges += (
+            f'<span style="display:inline-block;background:{bg};color:{col};'
+            f'border-radius:20px;padding:3px 12px;font-size:11px;font-weight:600;'
+            f'margin-right:8px;border:1px solid {col}44">{icon} {label}</span>'
+        )
     st.markdown(f"""
-    <div style="background:rgba(255,255,255,0.03);border-radius:12px;padding:16px 20px;
-                border:1px solid rgba(255,255,255,0.06);">
-      <span style="font-size:14px;font-weight:600;color:{summary_color}">
+    <div class="eval-box" style="background:{summary_bg};border-color:{summary_border}33">
+      <div class="eval-title" style="color:{summary_color}">
         📊 综合评估：{pass_cnt}/3 项检验通过
-      </span>
-      <p style="font-size:12px;color:rgba(224,230,237,0.5);margin:8px 0 0;line-height:1.7">
-        {summary_text}
-      </p>
+      </div>
+      <div style="margin:8px 0">{badges}</div>
+      <div class="eval-body">{summary_text}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1231,48 +1579,57 @@ with tab5:
 # Tab 6 — 异常检测
 # ────────────────────────────────────────────────────────────────────────
 with tab6:
-    st.markdown('<div class="section-title">遗漏异常统计</div>', unsafe_allow_html=True)
     warn_cnt6 = sum(1 for _, g in anom_list if g < crit_thr)
     crit_cnt6 = sum(1 for _, g in anom_list if g >= crit_thr)
     norm_cnt6 = 49 - len(anom_list)
 
+    # ── 彩色异常 KPI 卡片（4列）
+    st.markdown(ch('遗漏异常统计概览',
+                   f'以 {warn_thr:.0f} 期（2×均值）为预警阈值，{crit_thr:.0f} 期（3.5×）为危险阈值', '🚨'),
+                unsafe_allow_html=True)
     ca1, ca2, ca3, ca4 = st.columns(4)
-    with ca1:
-        st.markdown(f'<div class="stat-card"><div class="stat-num">{norm_cnt6}</div>'
-                    f'<div class="stat-lbl">正常号码</div></div>', unsafe_allow_html=True)
-    with ca2:
-        st.markdown(f'<div class="stat-card">'
-                    f'<div class="stat-num" style="color:#F39C12">{warn_cnt6}</div>'
-                    f'<div class="stat-lbl">预警（2–3.5x）</div></div>', unsafe_allow_html=True)
-    with ca3:
-        st.markdown(f'<div class="stat-card">'
-                    f'<div class="stat-num" style="color:#E74C3C">{crit_cnt6}</div>'
-                    f'<div class="stat-lbl">危险（>3.5x）</div></div>', unsafe_allow_html=True)
-    with ca4:
-        thr_val = f'{avg_freq:.0f}'
-        st.markdown(f'<div class="stat-card"><div class="stat-num">{thr_val}</div>'
-                    f'<div class="stat-lbl">预警阈值（期）</div></div>', unsafe_allow_html=True)
+    anom_kpis = [
+        (str(norm_cnt6), '✅ 正常号码', f'遗漏 < {warn_thr:.0f}期',
+         '#27AE60', 'linear-gradient(90deg,#27AE60,#00C9FF)'),
+        (str(warn_cnt6), '🟡 预警号码', f'{warn_thr:.0f}–{crit_thr:.0f}期',
+         '#F39C12', 'linear-gradient(90deg,#F39C12,#E67E22)'),
+        (str(crit_cnt6), '🔴 危险号码', f'> {crit_thr:.0f}期',
+         '#E74C3C', 'linear-gradient(90deg,#E74C3C,#FF6B6B)'),
+        (f'{avg_freq:.0f}期', '均值遗漏', '理论预警基准',
+         '#9B59B6', 'linear-gradient(90deg,#9B59B6,#7B68EE)'),
+    ]
+    for col, (v, l, s, ac, gr) in zip([ca1, ca2, ca3, ca4], anom_kpis):
+        with col:
+            st.markdown(stat_card_html(v, l, s, ac, gr), unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">异常号码出现位置（近 200 期）</div>',
+    st.markdown(ch('异常号码出现位置（近 200 期）',
+                   '每行一个异常号码；点位 = 该号码在近200期中出现的位置（右端=最新）', '📍'),
                 unsafe_allow_html=True)
     st.pyplot(fig_anomaly_scatter(specials, gap_arr, avg_freq), use_container_width=True)
     plt.close('all')
+    st.markdown(ib('图中无点的行说明该号码在近200期内从未出现；点越靠右说明越近期出现过。'
+                   '出现点稀疏≠该号码"欠账"，彩票开奖无记忆性。', 'orange'),
+                unsafe_allow_html=True)
 
     if anom_list:
         st.markdown('<br>', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">异常明细</div>', unsafe_allow_html=True)
+        st.markdown(ch('异常明细表', '按遗漏期数降序排列，仅作统计记录', '📋'),
+                    unsafe_allow_html=True)
         anom_df = pd.DataFrame([{
-            '号码':       f'No.{num}',
-            '当前遗漏':   f'{gap} 期',
-            '均值倍数':   f'×{gap/avg_freq:.2f}',
-            '预警等级':   '🔴 危险' if gap >= crit_thr else '🟡 预警',
-            '统计说明':   '历史遗漏对独立随机事件无预测价值',
+            '号码':     f'No.{num}',
+            '当前遗漏': f'{gap} 期',
+            '均值倍数': f'×{gap/avg_freq:.2f}',
+            '预警等级': '🔴 危险' if gap >= crit_thr else '🟡 预警',
+            '统计说明': '遗漏对随机事件无预测价值',
         } for num, gap in anom_list])
         st.dataframe(anom_df, use_container_width=True, hide_index=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">频率偏离检测（Z-score > 2σ）</div>',
+
+    # ── Z-score 频率偏离
+    st.markdown(ch('频率偏离检测（Z-score > 2σ）',
+                   '当某号码出现次数偏离均值超过 2 个标准差时，在统计上属小概率事件', '📏'),
                 unsafe_allow_html=True)
     sigma    = freq_arr.std()
     dev_nums = [(i+1, freq_arr[i], (freq_arr[i]-avg_freq)/sigma)
@@ -1285,27 +1642,62 @@ with tab6:
         low_devs  = [(n_, c, z) for n_, c, z in dev_nums if z < 0]
         with col_d1:
             if high_devs:
-                st.markdown('**频率偏高号码（>均值+2σ）**')
+                rows_hd = ''
                 for num_, cnt_, z_ in high_devs:
-                    st.markdown(f'`{num_:2d}` — {cnt_:.0f}次  Z=`{z_:+.2f}`')
+                    rows_hd += (
+                        f'<div style="display:flex;gap:10px;align-items:center;padding:6px 0;'
+                        f'border-bottom:1px solid rgba(255,255,255,.04);font-size:12px">'
+                        f'<span style="font-weight:700;color:#FF6B6B;width:40px">No.{num_:02d}</span>'
+                        f'<span style="color:#E0E6ED;flex:1">{cnt_:.0f}次</span>'
+                        f'<span style="background:rgba(255,107,107,.12);color:#FF6B6B;'
+                        f'padding:2px 8px;border-radius:10px;font-size:11px">Z={z_:+.2f}</span>'
+                        f'</div>'
+                    )
+                st.markdown(
+                    '<div style="background:rgba(255,107,107,.05);border-radius:10px;'
+                    'padding:12px 16px;border:1px solid rgba(255,107,107,.12)">'
+                    '<div style="font-size:12px;font-weight:600;color:#FF6B6B;margin-bottom:8px">'
+                    '📈 频率偏高（>均值+2σ）</div>' + rows_hd + '</div>',
+                    unsafe_allow_html=True
+                )
         with col_d2:
             if low_devs:
-                st.markdown('**频率偏低号码（<均值-2σ）**')
+                rows_ld = ''
                 for num_, cnt_, z_ in low_devs:
-                    st.markdown(f'`{num_:2d}` — {cnt_:.0f}次  Z=`{z_:+.2f}`')
+                    rows_ld += (
+                        f'<div style="display:flex;gap:10px;align-items:center;padding:6px 0;'
+                        f'border-bottom:1px solid rgba(255,255,255,.04);font-size:12px">'
+                        f'<span style="font-weight:700;color:#A0AEC0;width:40px">No.{num_:02d}</span>'
+                        f'<span style="color:#E0E6ED;flex:1">{cnt_:.0f}次</span>'
+                        f'<span style="background:rgba(74,85,104,.2);color:#A0AEC0;'
+                        f'padding:2px 8px;border-radius:10px;font-size:11px">Z={z_:+.2f}</span>'
+                        f'</div>'
+                    )
+                st.markdown(
+                    '<div style="background:rgba(74,85,104,.06);border-radius:10px;'
+                    'padding:12px 16px;border:1px solid rgba(74,85,104,.15)">'
+                    '<div style="font-size:12px;font-weight:600;color:#A0AEC0;margin-bottom:8px">'
+                    '📉 频率偏低（<均值-2σ）</div>' + rows_ld + '</div>',
+                    unsafe_allow_html=True
+                )
     else:
-        st.success('✅ 所有号码频率均在 ±2σ 范围内，无显著偏离')
+        st.markdown(ib('✅ 所有号码频率均在 ±2σ 范围内，无统计显著偏离，符合随机期望。',
+                       'green'), unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.info('💡 提示：异常标记仅反映统计状态。遗漏长不代表"即将出现"，遗漏短不代表"不会出现"。'
-            '彩票每期开奖独立，历史状态对未来无任何影响。')
+    st.markdown(ib('💡 异常标记仅反映统计状态，不应据此选号。'
+                   '遗漏长不代表"即将出现"，遗漏短不代表"不会出现"。'
+                   '彩票每期开奖独立，历史状态对未来无任何影响。', 'blue'),
+                unsafe_allow_html=True)
 
 
 # ────────────────────────────────────────────────────────────────────────
 # Tab 7 — 分析报告
 # ────────────────────────────────────────────────────────────────────────
 with tab7:
-    st.markdown('<div class="section-title">自动分析结论</div>', unsafe_allow_html=True)
+    st.markdown(ch('自动分析结论',
+                   '基于统计检验结果自动生成的解读，绿色边框=正常，橙色边框=注意', '📝'),
+                unsafe_allow_html=True)
 
     # 动态生成结论
     top1     = max(zodiac_cnt, key=zodiac_cnt.get) if zodiac_cnt else '-'
@@ -1353,7 +1745,7 @@ with tab7:
                     unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">报告摘要</div>', unsafe_allow_html=True)
+    st.markdown(ch('报告摘要', '关键指标与检验结果一览', '📋'), unsafe_allow_html=True)
     col_r1, col_r2 = st.columns(2)
 
     with col_r1:
@@ -1389,7 +1781,8 @@ with tab7:
         """, unsafe_allow_html=True)
 
     st.markdown('<br>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">导出报告</div>', unsafe_allow_html=True)
+    st.markdown(ch('导出报告', '生成包含所有图表和分析结论的独立 HTML 文件，可用浏览器直接打开', '📥'),
+                unsafe_allow_html=True)
 
     if st.button('⚙️ 生成 HTML 分析报告', type='primary', use_container_width=False):
         with st.spinner('正在渲染报告，请稍候...'):
