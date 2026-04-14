@@ -78,15 +78,37 @@ st.markdown("""
     font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
   }
   .dashboard-header {
-    background: linear-gradient(135deg, #0F2744 0%, #1A3A5C 100%);
-    border-radius: 14px;
-    padding: 24px 32px 18px;
+    background: linear-gradient(135deg, #0D1F35 0%, #0F2744 50%, #152E4A 100%);
+    border-radius: 16px;
+    padding: 22px 28px 16px;
     margin-bottom: 20px;
-    border: 1px solid rgba(0,201,255,0.15);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    border: 1px solid rgba(0,201,255,0.18);
+    box-shadow: 0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    position: relative;
+    overflow: hidden;
   }
-  .dashboard-header h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 4px; }
-  .dashboard-header p  { font-size: 12px; color: rgba(255,255,255,0.5); margin: 0; }
+  .dashboard-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00C9FF 40%, #7B68EE 70%, transparent);
+  }
+  .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .header-title { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: .3px; }
+  .header-title span { color: #00C9FF; }
+  .header-meta { display: flex; gap: 18px; }
+  .header-meta-item { text-align: center; }
+  .header-meta-val { font-size: 18px; font-weight: 700; color: #00C9FF; line-height: 1; }
+  .header-meta-val.red { color: #FF6B6B; }
+  .header-meta-lbl { font-size: 10px; color: rgba(224,230,237,0.4); margin-top: 2px; letter-spacing: .5px; }
+  .header-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 10px 0 8px; }
+  .header-notice {
+    font-size: 11px;
+    color: rgba(224,230,237,0.35);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .header-notice::before { content: '⚠'; font-size: 10px; opacity: .6; }
   .stat-card {
     background: linear-gradient(145deg, #1A2E44, #152438);
     border-radius: 12px; padding: 18px 12px; text-align: center;
@@ -96,11 +118,6 @@ st.markdown("""
   .stat-num { font-size: 28px; font-weight: 700; color: #00C9FF; }
   .stat-lbl { font-size: 11px; color: rgba(224,230,237,0.5); margin-top: 5px;
                text-transform: uppercase; letter-spacing: .8px; }
-  .warn-box {
-    background: rgba(243,156,18,0.08); border-left: 3px solid #F39C12;
-    padding: 8px 14px; border-radius: 0 6px 6px 0;
-    font-size: 12px; color: rgba(224,230,237,0.65); margin-bottom: 12px;
-  }
   .concl-item { padding: 6px 0; font-size: 13px; color: #E0E6ED; }
   .concl-item span { color: #00C9FF; font-weight: 600; margin-right: 6px; }
   section[data-testid="stSidebar"] { background: #111D2C !important;
@@ -245,13 +262,26 @@ latest = df_full.iloc[-1]
 # ── Header ───────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="dashboard-header">
-  <h1>📊 特码统计分析系统</h1>
-  <p>基于概率统计的随机抽样分析平台 &nbsp;·&nbsp;
-     最新期号 <strong style="color:#00C9FF">{latest['expect']}</strong> &nbsp;·&nbsp;
-     特码 <strong style="color:#FF6B6B">{int(latest['special'])}</strong> &nbsp;·&nbsp;
-     当前筛选 <strong style="color:#00C9FF">{n}</strong> 期数据</p>
+  <div class="header-top">
+    <div class="header-title">📊 <span>特码</span>统计分析系统</div>
+    <div class="header-meta">
+      <div class="header-meta-item">
+        <div class="header-meta-val">{n}</div>
+        <div class="header-meta-lbl">当前期数</div>
+      </div>
+      <div class="header-meta-item">
+        <div class="header-meta-val">{latest['expect']}</div>
+        <div class="header-meta-lbl">最新期号</div>
+      </div>
+      <div class="header-meta-item">
+        <div class="header-meta-val red">{int(latest['special'])}</div>
+        <div class="header-meta-lbl">上期特码</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-divider"></div>
+  <div class="header-notice">本系统仅用于历史数据统计分析与学习研究，结果不具备任何预测能力，严禁用于赌博或选号</div>
 </div>
-<div class="warn-box">⚠️ 本系统仅用于历史数据统计分析与学习研究，结果不具备任何预测能力，严禁用于赌博或选号。</div>
 """, unsafe_allow_html=True)
 
 # ── Tabs ─────────────────────────────────────────────────────────────────
