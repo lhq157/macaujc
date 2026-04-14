@@ -2,8 +2,8 @@ name: 每日数据更新
 
 on:
   schedule:
-    # 每天 21:32 CST（= 13:32 UTC）自动运行
-    - cron: '32 13 * * *'
+    # 每天 21:35 CST（= 13:35 UTC）自动运行
+    - cron: '35 13 * * *'
   workflow_dispatch:  # 允许手动触发
 
 jobs:
