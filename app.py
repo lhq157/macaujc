@@ -23,7 +23,8 @@ import config
 IS_CLOUD = not os.access(os.path.join(os.path.dirname(__file__), 'output'), os.W_OK)
 
 # ── 中文字体 & 深色图表 ───────────────────────────────────────────────────
-matplotlib.rcParams['font.sans-serif'] = ['PingFang SC', 'Hiragino Sans GB',
+matplotlib.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'Noto Sans CJK',
+                                           'PingFang SC', 'Hiragino Sans GB',
                                            'STHeiti', 'Arial Unicode MS', 'DejaVu Sans']
 matplotlib.rcParams['axes.unicode_minus'] = False
 matplotlib.rcParams['figure.facecolor']  = '#1A2634'
@@ -145,11 +146,17 @@ with st.sidebar:
         # ── 时间范围 ──────────────────────────────────────────────────────
         min_d = df_sel['openTime'].min().date()
         max_d = df_sel['openTime'].max().date()
-        c1, c2 = st.columns(2)
-        with c1:
-            start_d = st.date_input('开始', min_d, min_value=min_d, max_value=max_d)
-        with c2:
-            end_d   = st.date_input('结束', max_d, min_value=min_d, max_value=max_d)
+        date_range = st.date_input(
+            '时间范围',
+            value=(min_d, max_d),
+            min_value=min_d,
+            max_value=max_d,
+            format='YYYY/MM/DD',
+        )
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+            start_d, end_d = date_range
+        else:
+            start_d, end_d = min_d, max_d
 
         df_full = df_sel[
             (df_sel['openTime'].dt.date >= start_d) &
