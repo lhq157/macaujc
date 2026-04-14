@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+
+# 报告（体积大，不入库）
+output/reports/
+output/*.log
+output/run_all.log
+
+# 博客生成内容（Cloudflare Pages 自动生成）
+blog/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+
+# macOS
+.DS_Store
+
+# 日志
+*.log
