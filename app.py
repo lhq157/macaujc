@@ -721,6 +721,133 @@ def fig_zodiac_odd(df: pd.DataFrame):
 # 5. HTML 报告生成
 # ══════════════════════════════════════════════════════════════════════════
 
+def fig_window_delta_bar(specials_all: np.ndarray, w_start: int, w_size: int,
+                         label: str = '') -> plt.Figure:
+    """窗口内各号码频率与期望值的偏差柱状图（红=超期望，蓝=低于期望）"""
+    win    = specials_all[w_start:w_start + w_size]
+    freq_w = np.array([Counter(win.tolist()).get(i, 0) for i in range(1, 50)])
+    exp_w  = max(len(win) / 49.0, 0.001)
+    delta  = freq_w - exp_w
+    colors = [PALETTE['red'] if d > 0 else PALETTE['blue'] for d in delta]
+    fig, ax = _fig(13, 3.8)
+    ax.bar(range(1, 50), delta, color=colors, alpha=0.82, zorder=2)
+    ax.axhline(0, color='#2A3F54', linewidth=1.2, zorder=3)
+    ax.set_xlabel('号码', color='#A0AEC0', fontsize=9)
+    ax.set_ylabel('偏差（实际 − 期望）', color='#A0AEC0', fontsize=9)
+    ax.set_title(f'窗口频率偏差  {label}  · 期望值 {exp_w:.2f} 次/号',
+                 fontsize=10, pad=8, color='#E0E6ED')
+    ax.tick_params(colors='#A0AEC0', labelsize=8)
+    ax.grid(axis='y', alpha=0.18, zorder=1)
+    fig.tight_layout()
+    return fig
+
+
+def fig_multi_rolling(specials_all: np.ndarray, window_n: int,
+                      nums: list) -> plt.Figure:
+    """多号码滚动窗口频率折线对比"""
+    colors6 = ['#FF6B6B', '#00C9FF', '#FFEAA7', '#A29BFE']
+    exp_rate = window_n / 49.0
+    fig, ax = _fig(13, 4.2)
+    for idx, num in enumerate(nums[:4]):
+        mask  = (specials_all == num).astype(int)
+        roll  = np.convolve(mask, np.ones(window_n, dtype=int), mode='valid')
+        color = colors6[idx % 4]
+        ax.plot(np.arange(len(roll)), roll, color=color, linewidth=1.6,
+                label=f'No.{num}', alpha=0.9)
+    ax.axhline(exp_rate, color='rgba(255,255,255,0.25)', linewidth=1.2,
+               linestyle='--', label=f'期望 {exp_rate:.1f}')
+    ax.fill_between(np.arange(len(roll)), exp_rate, alpha=0.04, color='white')
+    ax.set_xlabel(f'窗口末端期序（窗口长度={window_n}期）',
+                  color='#A0AEC0', fontsize=9)
+    ax.set_ylabel(f'近{window_n}期出现次数', color='#A0AEC0', fontsize=9)
+    ax.set_title(f'{window_n}期滑动窗口 · 多号码频率对比',
+                 fontsize=10, pad=8, color='#E0E6ED')
+    ax.tick_params(colors='#A0AEC0', labelsize=8)
+    ax.legend(fontsize=9, framealpha=0.12,
+              labelcolor='#E0E6ED', facecolor='#1A2634')
+    ax.grid(axis='y', alpha=0.18)
+    fig.tight_layout()
+    return fig
+
+
+def fig_chunk_heatmap(specials_all: np.ndarray, chunk_size: int = 50) -> plt.Figure:
+    """时期分块频率热力图：行=号码1-49，列=时间块，颜色=偏差程度"""
+    n_total  = len(specials_all)
+    n_chunks = max(2, n_total // chunk_size)
+    eff_chunk = n_total // n_chunks
+    mat = np.zeros((49, n_chunks))
+    for ci in range(n_chunks):
+        chunk = specials_all[ci * eff_chunk:(ci + 1) * eff_chunk]
+        for num in chunk:
+            if 1 <= int(num) <= 49:
+                mat[int(num) - 1, ci] += 1
+    expected = eff_chunk / 49.0
+    mat_norm = (mat - expected) / max(expected, 0.001)
+    fig_h = max(5.5, min(9, 49 * 0.17))
+    fig_w = max(8,   min(16, n_chunks * 0.55))
+    fig, ax = _fig(fig_w, fig_h)
+    im = ax.imshow(mat_norm, aspect='auto', cmap='RdBu_r',
+                   vmin=-1.5, vmax=1.5, interpolation='nearest')
+    ax.set_yticks(range(0, 49, 6))
+    ax.set_yticklabels([str(i + 1) for i in range(0, 49, 6)],
+                       fontsize=8, color='#A0AEC0')
+    x_step = max(1, n_chunks // 20)
+    ax.set_xticks(range(0, n_chunks, x_step))
+    ax.set_xticklabels(
+        [f'{ci * eff_chunk + 1}' for ci in range(0, n_chunks, x_step)],
+        rotation=45, ha='right', fontsize=7, color='#A0AEC0')
+    ax.set_ylabel('号码', color='#A0AEC0', fontsize=9)
+    ax.set_xlabel('起始期序', color='#A0AEC0', fontsize=9)
+    ax.set_title(
+        f'时期分块频率热力图  每块≈{eff_chunk}期 · 共{n_chunks}块\n'
+        '红=高于期望  蓝=低于期望  白=接近期望',
+        fontsize=9, pad=8, color='#E0E6ED')
+    cb = plt.colorbar(im, ax=ax, label='偏差/期望', shrink=0.75, pad=0.02)
+    cb.ax.tick_params(colors='#A0AEC0', labelsize=7)
+    cb.set_label('偏差/期望', color='#A0AEC0', fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def fig_chi2_vs_window(window_sizes: list, chi2_vals: list,
+                       p_vals: list, sig_level: float) -> plt.Figure:
+    """卡方统计量与 p 值随窗口大小的变化折线图"""
+    bg = PALETTE['bg']
+    spine_c = '#2A3F54'
+    tc = '#A0AEC0'
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 5), sharex=True)
+    fig.patch.set_facecolor(bg)
+    for ax in (ax1, ax2):
+        ax.set_facecolor(bg)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(spine_c)
+        ax.spines['bottom'].set_color(spine_c)
+        ax.tick_params(colors=tc, labelsize=8)
+    ax1.plot(window_sizes, chi2_vals, color='#00C9FF', linewidth=1.6, zorder=2)
+    ax1.fill_between(window_sizes, chi2_vals, alpha=0.08, color='#00C9FF')
+    ax1.set_ylabel('χ² 统计量', color=tc, fontsize=9)
+    ax1.yaxis.label.set_color(tc)
+    ax1.grid(axis='y', alpha=0.15)
+    ax2.plot(window_sizes, p_vals, color='#FFEAA7', linewidth=1.6, zorder=2)
+    ax2.axhline(sig_level, color='#E74C3C', linewidth=1.2,
+                linestyle='--', label=f'α = {sig_level}', zorder=3)
+    ax2.fill_between(window_sizes, p_vals, sig_level,
+                     where=[p <= sig_level for p in p_vals],
+                     color='#E74C3C', alpha=0.12, label='拒绝H₀区域')
+    ax2.set_ylabel('p 值', color=tc, fontsize=9)
+    ax2.set_xlabel('窗口大小（期）', color=tc, fontsize=9)
+    ax2.xaxis.label.set_color(tc)
+    ax2.yaxis.label.set_color(tc)
+    ax2.legend(fontsize=8, framealpha=0.12,
+               labelcolor='#E0E6ED', facecolor=bg)
+    ax2.grid(axis='y', alpha=0.15)
+    fig.suptitle('卡方检验统计量随窗口大小的变化（使用最近 N 期数据）',
+                 fontsize=10, color='#E0E6ED', y=1.01)
+    fig.tight_layout()
+    return fig
+
+
 def fig_to_b64(fig) -> str:
     """将 matplotlib figure 转为 base64 PNG 字符串（用于内嵌 HTML）"""
     buf = io.BytesIO()
@@ -1467,6 +1594,66 @@ with tab2:
         st.markdown(ib(f'尾数 <strong>{max_tail}</strong> 出现最多（{tail_cnt[max_tail]}次），'
                        f'均值 {n/10:.1f} 次/尾数'), unsafe_allow_html=True)
 
+    st.markdown('<br>', unsafe_allow_html=True)
+
+    # ── ⚡ 动态窗口频率偏差 ──────────────────────────────────────────────
+    st.markdown(ch('⚡ 动态窗口频率偏差',
+                   '拖动两个滑块选择任意历史时间窗口，实时刷新号码相对期望的频率偏差；红柱=超期望，蓝柱=低于期望',
+                   '🎛️'), unsafe_allow_html=True)
+    col_wctrl, col_wchart = st.columns([1, 3])
+    with col_wctrl:
+        w2_max   = min(n, 500)
+        w2_size  = st.slider('窗口大小（期）', 20, w2_max, min(100, w2_max),
+                              step=10, key='w2_size')
+        w2_end   = st.slider('窗口末尾位置', w2_size, n, n, step=1, key='w2_end',
+                              help='向左拖动查看历史任意窗口，右端=最新数据')
+        w2_start = w2_end - w2_size
+        win2_sp  = specials[w2_start:w2_end]
+        freq_w2  = np.array([Counter(win2_sp.tolist()).get(i, 0) for i in range(1, 50)])
+        exp_w2   = len(win2_sp) / 49.0
+        hot3_w   = sorted(enumerate(freq_w2, 1), key=lambda x: x[1], reverse=True)[:3]
+        cold3_w  = sorted(enumerate(freq_w2, 1), key=lambda x: x[1])[:3]
+        hot_html  = ''.join(
+            f'<div style="margin:3px 0"><strong style="color:#E0E6ED">No.{nm}</strong>'
+            f' <span style="color:rgba(224,230,237,0.5);font-size:11px">'
+            f'{v:.0f}次 (<span style="color:#FF6B6B">+{v-exp_w2:.1f}</span>)</span></div>'
+            for nm, v in hot3_w
+        )
+        cold_html = ''.join(
+            f'<div style="margin:3px 0"><strong style="color:#E0E6ED">No.{nm}</strong>'
+            f' <span style="color:rgba(224,230,237,0.5);font-size:11px">'
+            f'{v:.0f}次 (<span style="color:#74B9FF">{v-exp_w2:.1f}</span>)</span></div>'
+            for nm, v in cold3_w
+        )
+        st.markdown(f"""
+        <div style="background:#1A2634;border:1px solid rgba(0,201,255,0.12);
+                    border-radius:10px;padding:14px 16px;margin-top:10px;font-size:12px">
+          <div style="color:rgba(224,230,237,0.4);font-size:10px;text-transform:uppercase;
+                      letter-spacing:.5px;margin-bottom:8px">窗口摘要</div>
+          <div style="margin:3px 0">第 <strong>{w2_start+1}</strong>–<strong>{w2_end}</strong> 期</div>
+          <div style="margin:3px 0;color:rgba(224,230,237,0.5)">期望值 {exp_w2:.2f} 次/号</div>
+          <div style="margin:10px 0 4px;color:#FF6B6B;font-size:11px;font-weight:600">
+            🔥 窗口热号（超期望）</div>
+          {hot_html}
+          <div style="margin:10px 0 4px;color:#74B9FF;font-size:11px;font-weight:600">
+            🧊 窗口冷号（低于期望）</div>
+          {cold_html}
+        </div>
+        """, unsafe_allow_html=True)
+    with col_wchart:
+        st.pyplot(
+            fig_window_delta_bar(specials, w2_start, w2_size,
+                                 f'第{w2_start+1}–{w2_end}期'),
+            use_container_width=True
+        )
+        plt.close('all')
+        st.markdown(
+            ib('窗口越小，随机波动越大，偏差越剧烈。'
+               '任意窗口内出现的热号/冷号均为正常统计波动，不代表该号码具有选取价值。',
+               'blue'),
+            unsafe_allow_html=True
+        )
+
 
 # ────────────────────────────────────────────────────────────────────────
 # Tab 3 — 结构分析
@@ -1679,6 +1866,64 @@ with tab4:
             unsafe_allow_html=True
         )
 
+    st.markdown('<br>', unsafe_allow_html=True)
+
+    # ── 多号码滚动频率对比 ───────────────────────────────────────────────
+    st.markdown(ch('📊 多号码滚动频率对比',
+                   f'选择最多 4 个号码，同时查看它们在 {window_n} 期滑动窗口内的频率变化趋势',
+                   '📈'), unsafe_allow_html=True)
+    _default_nums = list(dict.fromkeys([
+        int(np.argmax(freq_arr)) + 1,
+        int(np.argmin(freq_arr)) + 1, 7, 42
+    ]))[:4]
+    nums_sel = st.multiselect(
+        '选择追踪的号码（最多 4 个）',
+        options=list(range(1, 50)),
+        default=_default_nums,
+        key='multi_nums',
+    )
+    if len(nums_sel) > 4:
+        st.warning('最多选择 4 个号码，已截取前 4 个')
+        nums_sel = nums_sel[:4]
+    if nums_sel and len(specials) >= window_n:
+        st.pyplot(fig_multi_rolling(specials, window_n, nums_sel),
+                  use_container_width=True)
+        plt.close('all')
+        st.markdown(
+            ib('各号码频率线在期望值附近随机波动，窗口越小波动越剧烈。'
+               '频率线的升降不代表趋势，彩票每期开奖互相独立。', 'blue'),
+            unsafe_allow_html=True
+        )
+    else:
+        st.info(f'数据不足（需 ≥ {window_n} 期），请在侧边栏扩大时间范围或缩小滑动窗口。')
+
+    st.markdown('<br>', unsafe_allow_html=True)
+
+    # ── 时期分块热力图 ───────────────────────────────────────────────────
+    st.markdown(ch('🗓 时期分块频率热力图',
+                   '将历史数据按固定期数分块，以颜色深浅直观观察各号码出现频率随时间的演变',
+                   '🌡️'), unsafe_allow_html=True)
+    _chunk_opts = [sz for sz in [20, 30, 50, 100, 150, 200] if n // sz >= 3]
+    if not _chunk_opts:
+        _chunk_opts = [max(10, n // 4)]
+    _chunk_def = _chunk_opts[min(2, len(_chunk_opts) - 1)]
+    chunk_size_sel = st.select_slider(
+        '分块大小（期/块）',
+        options=_chunk_opts,
+        value=_chunk_def,
+        key='chunk_size_sel',
+        help='块越小，时间分辨率越高；块越大，统计越稳定',
+    )
+    _n_chunks_preview = n // chunk_size_sel
+    st.caption(f'当前设置：共 {n} 期 ÷ {chunk_size_sel} 期/块 ≈ {_n_chunks_preview} 块')
+    st.pyplot(fig_chunk_heatmap(specials, chunk_size_sel), use_container_width=True)
+    plt.close('all')
+    st.markdown(
+        ib('热力图中任何局部红/蓝区块均为随机波动，不存在统计意义上的"号码周期"或"冷热轮换"规律。',
+           'orange'),
+        unsafe_allow_html=True
+    )
+
 
 # ────────────────────────────────────────────────────────────────────────
 # Tab 5 — 统计检验
@@ -1818,6 +2063,46 @@ with tab5:
       <div class="eval-body">{summary_text}</div>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown('<br>', unsafe_allow_html=True)
+
+    # ── 卡方检验窗口敏感性分析 ───────────────────────────────────────────
+    st.markdown(ch('③ 卡方检验窗口敏感性分析',
+                   '观察卡方统计量与 p 值如何随窗口大小（样本量）变化，揭示统计显著性对样本量的依赖性',
+                   '📈'), unsafe_allow_html=True)
+    col_ws1, col_ws2 = st.columns(2)
+    with col_ws1:
+        w5_min  = st.slider('起始窗口（期）', 30, max(31, n - 1), min(50, n // 4),
+                             step=10, key='w5_min')
+    with col_ws2:
+        w5_step = st.slider('步长（期）', 5, 50, 10, step=5, key='w5_step')
+    _win_sizes = list(range(w5_min, n + 1, w5_step))
+    if len(_win_sizes) > 120:
+        _win_sizes = _win_sizes[::max(1, len(_win_sizes) // 120)]
+    if len(_win_sizes) >= 3:
+        _chi2_ws, _p_ws = [], []
+        for _ws in _win_sizes:
+            _sp_ws   = specials[-_ws:]
+            _freq_ws = np.array([Counter(_sp_ws.tolist()).get(i, 0) for i in range(1, 50)])
+            _c2, _p2 = chisquare(_freq_ws, np.full(49, _freq_ws.mean()))
+            _chi2_ws.append(_c2)
+            _p_ws.append(_p2)
+        st.pyplot(
+            fig_chi2_vs_window(_win_sizes, _chi2_ws, _p_ws, sig_level),
+            use_container_width=True
+        )
+        plt.close('all')
+        _cross_alpha = sum(1 for p in _p_ws if p <= sig_level)
+        st.markdown(
+            ib(f'在 {len(_win_sizes)} 个窗口中，'
+               f'<strong>{_cross_alpha}</strong> 个（{_cross_alpha/len(_win_sizes)*100:.0f}%）的 p 值低于 α={sig_level}。'
+               '统计显著性高度依赖窗口大小选取；当 p 值在显著与不显著之间游走时，'
+               '结论本身就不可靠——这是随机性的有力证据。',
+               'blue' if _cross_alpha / len(_win_sizes) < 0.5 else 'orange'),
+            unsafe_allow_html=True
+        )
+    else:
+        st.info('数据量不足以进行窗口敏感性分析，请扩大时间范围。')
 
 
 # ────────────────────────────────────────────────────────────────────────
