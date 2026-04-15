@@ -269,8 +269,64 @@ st.markdown("""
   .eval-body  { font-size:12px; color:rgba(224,230,237,0.55); line-height:1.8; }
 
   /* ══ Sidebar & misc ══ */
-  section[data-testid="stSidebar"] { background:#111D2C !important;
-    border-right:1px solid rgba(0,201,255,0.08); }
+  section[data-testid="stSidebar"] {
+    background:#0D1821 !important;
+    border-right:1px solid rgba(0,201,255,0.08);
+  }
+  section[data-testid="stSidebar"] .block-container { padding-top:0 !important; }
+
+  /* 侧边栏 section 标签 */
+  .sb-sec {
+    font-size:10px; font-weight:700; color:rgba(0,201,255,0.55);
+    text-transform:uppercase; letter-spacing:1.2px;
+    padding:2px 0 6px; margin-top:4px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .sb-sec::after {
+    content:''; flex:1; height:1px;
+    background:rgba(0,201,255,0.1);
+  }
+
+  /* 侧边栏 mini-stat 行 */
+  .sb-stat-row { display:flex; gap:6px; margin:6px 0 10px; }
+  .sb-stat {
+    flex:1; background:rgba(0,201,255,0.07); border-radius:8px;
+    padding:7px 6px; text-align:center;
+    border:1px solid rgba(0,201,255,0.1);
+  }
+  .sb-stat-v { font-size:14px; font-weight:700; color:#00C9FF; line-height:1.2; }
+  .sb-stat-l { font-size:9px; color:rgba(224,230,237,0.32);
+               text-transform:uppercase; letter-spacing:.6px; margin-top:2px; }
+
+  /* 侧边栏 radio 水平样式 */
+  section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
+    gap:6px; flex-wrap:wrap;
+  }
+  section[data-testid="stSidebar"] .stRadio label {
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:20px; padding:4px 12px;
+    font-size:12px; cursor:pointer;
+    transition:all .15s;
+  }
+  section[data-testid="stSidebar"] .stRadio label:has(input:checked) {
+    background:rgba(0,201,255,0.15);
+    border-color:rgba(0,201,255,0.5);
+    color:#00C9FF;
+  }
+
+  /* 侧边栏按钮美化 */
+  section[data-testid="stSidebar"] .stButton > button {
+    border-radius:8px !important;
+    font-size:12px !important;
+    padding:6px 14px !important;
+    height:auto !important;
+  }
+  section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background:linear-gradient(135deg,#0077AA,#00C9FF) !important;
+    border:none !important;
+  }
+
   #MainMenu, footer { visibility:hidden; }
   header[data-testid="stHeader"] { background:transparent; }
   div[data-testid="stDataFrame"] { border-radius:10px; overflow:hidden; }
@@ -1354,21 +1410,34 @@ def generate_html_report(df_full, freq_arr, avg_freq, chi2_stat, chi2_p,
 # ══════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    st.markdown('### 📊 特码统计分析')
-    st.divider()
 
-    # ── 数据文件选择
+    # ── Brand Header ─────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="padding:20px 4px 14px;text-align:center;
+                border-bottom:1px solid rgba(0,201,255,0.1);margin-bottom:12px">
+      <div style="font-size:20px;font-weight:800;color:#E0E6ED;
+                  letter-spacing:.5px;line-height:1.2">
+        <span style="color:#00C9FF">📊</span> 特码统计分析</div>
+      <div style="font-size:9px;color:rgba(224,230,237,0.25);
+                  text-transform:uppercase;letter-spacing:2px;margin-top:5px">
+        Statistical Analysis System v2.0</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 数据文件 ─────────────────────────────────────────────────────────
+    st.markdown('<div class="sb-sec">📁 数据源</div>', unsafe_allow_html=True)
     csvs = sorted(glob.glob(os.path.join(config.OUTPUT_DIR, '????????.csv')))
     if not csvs:
         st.error('未找到数据文件，请先运行 main.py')
         st.stop()
     file_names = [os.path.basename(c) for c in csvs]
-    sel_file   = st.selectbox('📁 数据文件', file_names, index=len(file_names) - 1)
+    sel_file   = st.selectbox('数据文件', file_names, index=len(file_names) - 1,
+                               label_visibility='collapsed')
     sel_path   = os.path.join(config.OUTPUT_DIR, sel_file)
     df_raw     = load_csv(sel_path)
 
-    # ── 时间范围筛选
-    st.markdown('**🗓 时间范围**')
+    # ── 时间范围 ─────────────────────────────────────────────────────────
+    st.markdown('<div class="sb-sec">🗓 时间范围</div>', unsafe_allow_html=True)
     min_d = df_raw['openTime'].min().date()
     max_d = df_raw['openTime'].max().date()
     date_range = st.date_input(
@@ -1386,35 +1455,87 @@ with st.sidebar:
         (df_raw['openTime'].dt.date <= end_d)
     ].reset_index(drop=True)
 
-    st.divider()
+    # 当前筛选 mini stat 行
+    _n_filt = len(df_full)
+    _yr_s   = start_d.year
+    _yr_e   = end_d.year
+    st.markdown(f"""
+    <div class="sb-stat-row">
+      <div class="sb-stat">
+        <div class="sb-stat-v">{_n_filt}</div>
+        <div class="sb-stat-l">期数</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-stat-v">{_yr_s}</div>
+        <div class="sb-stat-l">起始年</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-stat-v">{_yr_e}</div>
+        <div class="sb-stat-l">截止年</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ── 分析参数
-    st.markdown('**⚙️ 分析参数**')
-    window_n  = st.slider('滑动窗口（期）', 30, 300, 100, step=10)
-    sig_level = st.selectbox('显著性水平 α', [0.05, 0.01], index=0)
-    acf_lags  = st.slider('自相关最大滞后', 5, 40, 20, step=5)
+    # ── 分析参数 ─────────────────────────────────────────────────────────
+    st.markdown('<div class="sb-sec">⚙️ 分析参数</div>', unsafe_allow_html=True)
+    window_n = st.slider('🔁 滑动窗口（期）', 30, 300, 100, step=10)
 
-    st.divider()
+    _sig_opts = ['α = 0.05', 'α = 0.01']
+    _sig_sel  = st.radio('显著性水平', _sig_opts, horizontal=True,
+                          label_visibility='visible')
+    sig_level = 0.05 if '0.05' in _sig_sel else 0.01
 
-    # ── 生肖展示模式
-    st.markdown('**🐲 生肖展示**')
-    display_mode = st.radio('展示模式', ['全部12肖', 'Top 5', '单生肖'], index=0)
-    sel_zodiac   = None
+    acf_lags = st.slider('📉 自相关最大滞后', 5, 40, 20, step=5)
+
+    # ── 生肖展示 ─────────────────────────────────────────────────────────
+    st.markdown('<div class="sb-sec">🐲 生肖筛选</div>', unsafe_allow_html=True)
+    display_mode = st.radio('展示模式', ['全部12肖', 'Top 5', '单生肖'],
+                             horizontal=True, label_visibility='collapsed')
+    sel_zodiac = None
     if display_mode == '单生肖':
-        sel_zodiac = st.selectbox('选择生肖', ZODIAC_ORDER)
+        sel_zodiac = st.selectbox('选择生肖', ZODIAC_ORDER,
+                                   label_visibility='collapsed')
 
-    st.divider()
-
-    # ── 操作按钮
+    # ── 数据刷新 / 状态 ──────────────────────────────────────────────────
+    st.markdown('<div class="sb-sec" style="margin-top:10px">🔄 数据状态</div>',
+                unsafe_allow_html=True)
     if IS_CLOUD:
-        st.success('🕘 数据每晚自动更新')
+        _last_file = file_names[-1].replace('.csv', '')
+        _last_disp = f'{_last_file[:4]}/{_last_file[4:6]}/{_last_file[6:]}' if len(_last_file) == 8 else _last_file
+        st.markdown(f"""
+        <div style="background:rgba(39,174,96,0.1);
+                    border:1px solid rgba(39,174,96,0.22);
+                    border-radius:10px;padding:10px 14px;
+                    display:flex;align-items:center;gap:10px">
+          <div style="width:8px;height:8px;background:#27AE60;border-radius:50%;
+                      box-shadow:0 0 6px #27AE60;flex-shrink:0"></div>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#27AE60">云端自动运行</div>
+            <div style="font-size:10px;color:rgba(224,230,237,0.38);margin-top:2px">
+              最新数据：{_last_disp}</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        if st.button('🚀 拉取最新数据', use_container_width=True, type='primary'):
-            fetch_data()
-            st.rerun()
+        _col_rb1, _col_rb2 = st.columns([3, 1])
+        with _col_rb1:
+            if st.button('🚀 拉取最新数据', use_container_width=True, type='primary'):
+                fetch_data()
+                st.rerun()
+        with _col_rb2:
+            if st.button('🔄', use_container_width=True, help='刷新页面'):
+                st.rerun()
 
-    st.divider()
-    st.caption('⚠️ 仅供学习研究，严禁赌博选号')
+    # ── Footer ───────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="margin-top:16px;padding-top:10px;
+                border-top:1px solid rgba(255,255,255,0.05);
+                font-size:10px;color:rgba(224,230,237,0.2);
+                text-align:center;line-height:1.8">
+      ⚠️ 仅供学习研究&nbsp;·&nbsp;严禁赌博选号<br>
+      <span style="font-size:9px;letter-spacing:.3px">数据来源：macaumarksix.com</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
