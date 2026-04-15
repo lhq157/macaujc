@@ -332,18 +332,41 @@ st.markdown("""
   button[data-testid="collapsedControl"],
   button[data-testid="baseButton-headerNoPadding"] { display:none !important; }
 
-  /* 顶部控制栏 */
+  /* ── 顶部控制栏 ────────────────────────────────── */
   .ctrl-label {
-    font-size:10px; font-weight:600; color:rgba(0,201,255,0.55);
-    text-transform:uppercase; letter-spacing:.9px; margin-bottom:4px;
+    font-size: 9px; font-weight: 700; color: rgba(0,201,255,.42);
+    text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 4px;
+    margin-top: 0; padding: 0;
   }
   .ctrl-stat {
-    background:rgba(0,201,255,0.07); border:1px solid rgba(0,201,255,0.12);
-    border-radius:8px; padding:8px 12px; text-align:center;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 9px; padding: 6px 9px; text-align: center;
+    transition: border-color .25s, background .25s;
   }
-  .ctrl-stat-v { font-size:17px; font-weight:700; color:#00C9FF; line-height:1.2; }
-  .ctrl-stat-l { font-size:9px; color:rgba(224,230,237,0.32);
-                 text-transform:uppercase; letter-spacing:.5px; margin-top:2px; }
+  .ctrl-stat:hover {
+    background: rgba(0,201,255,.08);
+    border-color: rgba(0,201,255,.22);
+  }
+  .ctrl-stat-v {
+    font-size: 15px; font-weight: 800; color: #00C9FF;
+    line-height: 1.2; letter-spacing: -.3px;
+  }
+  .ctrl-stat-l {
+    font-size: 8px; color: rgba(224,230,237,.25);
+    text-transform: uppercase; letter-spacing: .6px; margin-top: 2px;
+  }
+  /* expander 美化 */
+  div[data-testid="stExpander"] details {
+    background: rgba(255,255,255,.025) !important;
+    border: 1px solid rgba(255,255,255,.07) !important;
+    border-radius: 8px !important;
+  }
+  div[data-testid="stExpander"] summary {
+    font-size: 11px !important;
+    color: rgba(224,230,237,.45) !important;
+    padding: 5px 12px !important;
+  }
 
   #MainMenu, footer { visibility:hidden; }
   header[data-testid="stHeader"] { background:transparent; }
@@ -1427,11 +1450,11 @@ def generate_html_report(df_full, freq_arr, avg_freq, chi2_stat, chi2_p,
 # 6. 顶部控制栏（无侧边栏设计）
 # ══════════════════════════════════════════════════════════════════════════
 
-# ── Row 1：数据源 + 时间范围 + 当前统计 + 操作 ────────────────────────────
-_cb1, _cb2, _cb3, _cb4 = st.columns([1.8, 3.6, 1.8, 1.0])
+# ── Row 1：数据源 + 时间范围 + 指标卡片 + 操作 ──────────────────────────────
+_cb1, _cb2, _cb3, _cb4 = st.columns([1.8, 3.2, 2.4, 1.6])
 
 with _cb1:
-    st.markdown('<div class="ctrl-label">📁 数据文件</div>', unsafe_allow_html=True)
+    st.markdown('<p class="ctrl-label">📁 数据文件</p>', unsafe_allow_html=True)
     csvs = sorted(glob.glob(os.path.join(config.OUTPUT_DIR, '????????.csv')))
     if not csvs:
         st.error('未找到数据文件，请先运行 main.py')
@@ -1443,7 +1466,7 @@ with _cb1:
     df_raw     = load_csv(sel_path)
 
 with _cb2:
-    st.markdown('<div class="ctrl-label">🗓 时间范围</div>', unsafe_allow_html=True)
+    st.markdown('<p class="ctrl-label">🗓 时间范围</p>', unsafe_allow_html=True)
     min_d = df_raw['openTime'].min().date()
     max_d = df_raw['openTime'].max().date()
     date_range = st.date_input(
@@ -1461,33 +1484,41 @@ with _cb2:
     ].reset_index(drop=True)
 
 with _cb3:
-    st.markdown('<div class="ctrl-label">📊 当前筛选</div>', unsafe_allow_html=True)
     _n_filt  = len(df_full)
     _yr_span = (f'{start_d.year}' if start_d.year == end_d.year
                 else f'{start_d.year}–{end_d.year}')
+    # 4 格 2×2 指标 grid
     st.markdown(f"""
-    <div style="display:flex;gap:6px">
-      <div class="ctrl-stat" style="flex:1">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+      <div class="ctrl-stat">
         <div class="ctrl-stat-v">{_n_filt}</div>
-        <div class="ctrl-stat-l">期数</div>
+        <div class="ctrl-stat-l">总期数</div>
       </div>
-      <div class="ctrl-stat" style="flex:1">
-        <div class="ctrl-stat-v">{_yr_span}</div>
-        <div class="ctrl-stat-l">年份</div>
+      <div class="ctrl-stat">
+        <div class="ctrl-stat-v" style="font-size:13px;letter-spacing:0">{_yr_span}</div>
+        <div class="ctrl-stat-l">年份跨度</div>
+      </div>
+      <div class="ctrl-stat">
+        <div class="ctrl-stat-v" style="font-size:12px;color:#27AE60;letter-spacing:0">{start_d.strftime('%y/%m/%d')}</div>
+        <div class="ctrl-stat-l">起始日期</div>
+      </div>
+      <div class="ctrl-stat">
+        <div class="ctrl-stat-v" style="font-size:12px;color:#F39C12;letter-spacing:0">{end_d.strftime('%y/%m/%d')}</div>
+        <div class="ctrl-stat-l">最新日期</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
 with _cb4:
-    st.markdown('<div class="ctrl-label">🔄 操作</div>', unsafe_allow_html=True)
     if IS_CLOUD:
         _lf = file_names[-1].replace('.csv', '')
         _ld = f'{_lf[:4]}/{_lf[4:6]}/{_lf[6:]}' if len(_lf) == 8 else _lf
         st.markdown(f"""
-        <div style="background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.22);
-                    border-radius:8px;padding:8px 10px;text-align:center">
-          <div style="font-size:11px;font-weight:600;color:#27AE60">🟢 云端运行</div>
-          <div style="font-size:9px;color:rgba(224,230,237,0.35);margin-top:2px">{_ld}</div>
+        <div style="background:rgba(39,174,96,.08);border:1px solid rgba(39,174,96,.2);
+             border-radius:10px;padding:10px 12px;text-align:center">
+          <div style="font-size:10px;font-weight:700;color:#27AE60;letter-spacing:.5px">
+            🟢 &nbsp;云端运行</div>
+          <div style="font-size:9px;color:rgba(224,230,237,.28);margin-top:4px;letter-spacing:.3px">{_ld}</div>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -1497,9 +1528,9 @@ with _cb4:
         if st.button('🔄 刷新页面', use_container_width=True):
             st.rerun()
 
-st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
+st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
 
-# ── Row 2：分析参数 ────────────────────────────────────────────────────────
+# ── Row 2：分析参数（可折叠，默认收起）────────────────────────────────────
 with st.expander('⚙️ 分析参数', expanded=False):
     _ap1, _ap2, _ap3 = st.columns([3, 2, 3])
     with _ap1:
@@ -1788,8 +1819,7 @@ with tab1:
         ax_t.set_title(f'近 {lookback} 期特码走势  ▏蓝色阴影 = 最近 10 期', fontsize=9, pad=6)
         ax_t.grid(axis='y', alpha=0.18)
         fig_t.tight_layout(pad=0.4)
-        st.image(fig_to_b64(fig_t), use_container_width=True)
-        plt.close(fig_t)
+        st.pyplot(fig_t, use_container_width=True)
 
     with _tw2:
         r10_odd  = sum(1 for x in r10_nums if x % 2 == 1)
