@@ -91,7 +91,7 @@ st.set_page_config(
     page_title='特码统计分析系统',
     page_icon='📊',
     layout='wide',
-    initial_sidebar_state='expanded',
+    initial_sidebar_state='collapsed',
 )
 
 st.markdown("""
@@ -326,6 +326,24 @@ st.markdown("""
     background:linear-gradient(135deg,#0077AA,#00C9FF) !important;
     border:none !important;
   }
+
+  /* 完全隐藏侧边栏及展开按钮 */
+  section[data-testid="stSidebar"],
+  button[data-testid="collapsedControl"],
+  button[data-testid="baseButton-headerNoPadding"] { display:none !important; }
+
+  /* 顶部控制栏 */
+  .ctrl-label {
+    font-size:10px; font-weight:600; color:rgba(0,201,255,0.55);
+    text-transform:uppercase; letter-spacing:.9px; margin-bottom:4px;
+  }
+  .ctrl-stat {
+    background:rgba(0,201,255,0.07); border:1px solid rgba(0,201,255,0.12);
+    border-radius:8px; padding:8px 12px; text-align:center;
+  }
+  .ctrl-stat-v { font-size:17px; font-weight:700; color:#00C9FF; line-height:1.2; }
+  .ctrl-stat-l { font-size:9px; color:rgba(224,230,237,0.32);
+                 text-transform:uppercase; letter-spacing:.5px; margin-top:2px; }
 
   #MainMenu, footer { visibility:hidden; }
   header[data-testid="stHeader"] { background:transparent; }
@@ -1406,26 +1424,14 @@ def generate_html_report(df_full, freq_arr, avg_freq, chi2_stat, chi2_p,
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 6. 侧边栏控制面板
+# 6. 顶部控制栏（无侧边栏设计）
 # ══════════════════════════════════════════════════════════════════════════
 
-with st.sidebar:
+# ── Row 1：数据源 + 时间范围 + 当前统计 + 操作 ────────────────────────────
+_cb1, _cb2, _cb3, _cb4 = st.columns([1.8, 3.6, 1.8, 1.0])
 
-    # ── Brand Header ─────────────────────────────────────────────────────
-    st.markdown("""
-    <div style="padding:20px 4px 14px;text-align:center;
-                border-bottom:1px solid rgba(0,201,255,0.1);margin-bottom:12px">
-      <div style="font-size:20px;font-weight:800;color:#E0E6ED;
-                  letter-spacing:.5px;line-height:1.2">
-        <span style="color:#00C9FF">📊</span> 特码统计分析</div>
-      <div style="font-size:9px;color:rgba(224,230,237,0.25);
-                  text-transform:uppercase;letter-spacing:2px;margin-top:5px">
-        Statistical Analysis System v2.0</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── 数据文件 ─────────────────────────────────────────────────────────
-    st.markdown('<div class="sb-sec">📁 数据源</div>', unsafe_allow_html=True)
+with _cb1:
+    st.markdown('<div class="ctrl-label">📁 数据文件</div>', unsafe_allow_html=True)
     csvs = sorted(glob.glob(os.path.join(config.OUTPUT_DIR, '????????.csv')))
     if not csvs:
         st.error('未找到数据文件，请先运行 main.py')
@@ -1436,8 +1442,8 @@ with st.sidebar:
     sel_path   = os.path.join(config.OUTPUT_DIR, sel_file)
     df_raw     = load_csv(sel_path)
 
-    # ── 时间范围 ─────────────────────────────────────────────────────────
-    st.markdown('<div class="sb-sec">🗓 时间范围</div>', unsafe_allow_html=True)
+with _cb2:
+    st.markdown('<div class="ctrl-label">🗓 时间范围</div>', unsafe_allow_html=True)
     min_d = df_raw['openTime'].min().date()
     max_d = df_raw['openTime'].max().date()
     date_range = st.date_input(
@@ -1449,93 +1455,64 @@ with st.sidebar:
         start_d, end_d = date_range
     else:
         start_d, end_d = min_d, max_d
-
     df_full = df_raw[
         (df_raw['openTime'].dt.date >= start_d) &
         (df_raw['openTime'].dt.date <= end_d)
     ].reset_index(drop=True)
 
-    # 当前筛选 mini stat 行
-    _n_filt = len(df_full)
-    _yr_s   = start_d.year
-    _yr_e   = end_d.year
+with _cb3:
+    st.markdown('<div class="ctrl-label">📊 当前筛选</div>', unsafe_allow_html=True)
+    _n_filt  = len(df_full)
+    _yr_span = (f'{start_d.year}' if start_d.year == end_d.year
+                else f'{start_d.year}–{end_d.year}')
     st.markdown(f"""
-    <div class="sb-stat-row">
-      <div class="sb-stat">
-        <div class="sb-stat-v">{_n_filt}</div>
-        <div class="sb-stat-l">期数</div>
+    <div style="display:flex;gap:6px">
+      <div class="ctrl-stat" style="flex:1">
+        <div class="ctrl-stat-v">{_n_filt}</div>
+        <div class="ctrl-stat-l">期数</div>
       </div>
-      <div class="sb-stat">
-        <div class="sb-stat-v">{_yr_s}</div>
-        <div class="sb-stat-l">起始年</div>
-      </div>
-      <div class="sb-stat">
-        <div class="sb-stat-v">{_yr_e}</div>
-        <div class="sb-stat-l">截止年</div>
+      <div class="ctrl-stat" style="flex:1">
+        <div class="ctrl-stat-v">{_yr_span}</div>
+        <div class="ctrl-stat-l">年份</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── 分析参数 ─────────────────────────────────────────────────────────
-    st.markdown('<div class="sb-sec">⚙️ 分析参数</div>', unsafe_allow_html=True)
-    window_n = st.slider('🔁 滑动窗口（期）', 30, 300, 100, step=10)
-
-    _sig_opts = ['α = 0.05', 'α = 0.01']
-    _sig_sel  = st.radio('显著性水平', _sig_opts, horizontal=True,
-                          label_visibility='visible')
-    sig_level = 0.05 if '0.05' in _sig_sel else 0.01
-
-    acf_lags = st.slider('📉 自相关最大滞后', 5, 40, 20, step=5)
-
-    # ── 生肖展示 ─────────────────────────────────────────────────────────
-    st.markdown('<div class="sb-sec">🐲 生肖筛选</div>', unsafe_allow_html=True)
-    display_mode = st.radio('展示模式', ['全部12肖', 'Top 5', '单生肖'],
-                             horizontal=True, label_visibility='collapsed')
-    sel_zodiac = None
-    if display_mode == '单生肖':
-        sel_zodiac = st.selectbox('选择生肖', ZODIAC_ORDER,
-                                   label_visibility='collapsed')
-
-    # ── 数据刷新 / 状态 ──────────────────────────────────────────────────
-    st.markdown('<div class="sb-sec" style="margin-top:10px">🔄 数据状态</div>',
-                unsafe_allow_html=True)
+with _cb4:
+    st.markdown('<div class="ctrl-label">🔄 操作</div>', unsafe_allow_html=True)
     if IS_CLOUD:
-        _last_file = file_names[-1].replace('.csv', '')
-        _last_disp = f'{_last_file[:4]}/{_last_file[4:6]}/{_last_file[6:]}' if len(_last_file) == 8 else _last_file
+        _lf = file_names[-1].replace('.csv', '')
+        _ld = f'{_lf[:4]}/{_lf[4:6]}/{_lf[6:]}' if len(_lf) == 8 else _lf
         st.markdown(f"""
-        <div style="background:rgba(39,174,96,0.1);
-                    border:1px solid rgba(39,174,96,0.22);
-                    border-radius:10px;padding:10px 14px;
-                    display:flex;align-items:center;gap:10px">
-          <div style="width:8px;height:8px;background:#27AE60;border-radius:50%;
-                      box-shadow:0 0 6px #27AE60;flex-shrink:0"></div>
-          <div>
-            <div style="font-size:12px;font-weight:600;color:#27AE60">云端自动运行</div>
-            <div style="font-size:10px;color:rgba(224,230,237,0.38);margin-top:2px">
-              最新数据：{_last_disp}</div>
-          </div>
+        <div style="background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.22);
+                    border-radius:8px;padding:8px 10px;text-align:center">
+          <div style="font-size:11px;font-weight:600;color:#27AE60">🟢 云端运行</div>
+          <div style="font-size:9px;color:rgba(224,230,237,0.35);margin-top:2px">{_ld}</div>
         </div>
         """, unsafe_allow_html=True)
     else:
-        _col_rb1, _col_rb2 = st.columns([3, 1])
-        with _col_rb1:
-            if st.button('🚀 拉取最新数据', use_container_width=True, type='primary'):
-                fetch_data()
-                st.rerun()
-        with _col_rb2:
-            if st.button('🔄', use_container_width=True, help='刷新页面'):
-                st.rerun()
+        if st.button('🚀 拉取最新', use_container_width=True, type='primary'):
+            fetch_data()
+            st.rerun()
+        if st.button('🔄 刷新页面', use_container_width=True):
+            st.rerun()
 
-    # ── Footer ───────────────────────────────────────────────────────────
-    st.markdown("""
-    <div style="margin-top:16px;padding-top:10px;
-                border-top:1px solid rgba(255,255,255,0.05);
-                font-size:10px;color:rgba(224,230,237,0.2);
-                text-align:center;line-height:1.8">
-      ⚠️ 仅供学习研究&nbsp;·&nbsp;严禁赌博选号<br>
-      <span style="font-size:9px;letter-spacing:.3px">数据来源：macaumarksix.com</span>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
+
+# ── Row 2：分析参数 ────────────────────────────────────────────────────────
+with st.expander('⚙️ 分析参数', expanded=False):
+    _ap1, _ap2, _ap3 = st.columns([3, 2, 3])
+    with _ap1:
+        window_n = st.slider('🔁 滑动窗口（期）', 30, 300, 100, step=10,
+                              help='影响 Tab 4 冷热榜、多号码对比图')
+    with _ap2:
+        _sig_sel  = st.radio('显著性水平 α', ['0.05', '0.01'], horizontal=True)
+        sig_level = float(_sig_sel)
+    with _ap3:
+        acf_lags = st.slider('📉 自相关最大滞后', 5, 40, 20, step=5,
+                              help='影响 Tab 5 自相关检验图')
+
+st.divider()
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1712,6 +1689,137 @@ with tab1:
         df_full[show_cols].tail(10).iloc[::-1].reset_index(drop=True),
         use_container_width=True, hide_index=True
     )
+
+    # ── 最近10期走势快览
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.markdown(ch('最近 10 期走势快览', '号码球 · 近30期趋势脉冲 · 奇偶大小快速统计', '🎯'),
+                unsafe_allow_html=True)
+
+    # ─ 号码球卡片（最近10期，最新在前）
+    recent10_df  = df_full.tail(10).iloc[::-1].reset_index(drop=True)
+    r10_nums     = recent10_df['special'].astype(int).tolist()
+    r10_periods  = recent10_df['expect'].astype(str).tolist()
+
+    def _ball_style(num: int):
+        """按号码段返回 (球色, 辉光色)"""
+        if 1  <= num <= 12: return '#FF6B6B', '#FF6B6B44'
+        if 13 <= num <= 24: return '#F39C12', '#F39C1244'
+        if 25 <= num <= 36: return '#00C9FF', '#00C9FF44'
+        return '#27AE60', '#27AE6044'
+
+    balls_html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 16px">'
+    for period, num in zip(r10_periods, r10_nums):
+        bg, glow = _ball_style(num)
+        is_odd   = num % 2 == 1
+        is_big   = num > 24
+        tag_o    = '奇' if is_odd else '偶'
+        tag_s    = '大' if is_big else '小'
+        c_o      = '#00C9FF' if is_odd else '#FF6B6B'
+        c_s      = '#F39C12' if is_big else '#9B59B6'
+        short_p  = period[-3:] if len(period) >= 3 else period
+        balls_html += f'''
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:52px">
+          <div style="font-size:9px;color:rgba(224,230,237,.35);letter-spacing:.4px">{short_p}</div>
+          <div style="width:46px;height:46px;border-radius:50%;background:{bg};
+               display:flex;align-items:center;justify-content:center;
+               font-size:15px;font-weight:800;color:#fff;
+               box-shadow:0 0 12px {glow}">{num:02d}</div>
+          <div style="display:flex;gap:3px">
+            <span style="font-size:8px;color:{c_o};background:{c_o}22;
+                  border-radius:3px;padding:1px 4px;letter-spacing:.3px">{tag_o}</span>
+            <span style="font-size:8px;color:{c_s};background:{c_s}22;
+                  border-radius:3px;padding:1px 4px;letter-spacing:.3px">{tag_s}</span>
+          </div>
+        </div>'''
+    balls_html += '</div>'
+    st.markdown(balls_html, unsafe_allow_html=True)
+
+    # ─ 色块图例说明
+    legend_html = (
+        '<div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">'
+        + ''.join(
+            f'<span style="font-size:10px;color:{c};background:{c}18;'
+            f'border-radius:4px;padding:2px 8px">{lab}</span>'
+            for c, lab in [
+                ('#FF6B6B','1–12'), ('#F39C12','13–24'),
+                ('#00C9FF','25–36'), ('#27AE60','37–49'),
+            ]
+        )
+        + '</div>'
+    )
+    st.markdown(legend_html, unsafe_allow_html=True)
+
+    # ─ 走势图 + 快速统计（2列）
+    _tw1, _tw2 = st.columns([3, 1])
+
+    with _tw1:
+        lookback = min(30, len(specials))
+        recent_vals = specials[-lookback:]
+        xs = list(range(lookback))
+
+        fig_t, ax_t = _fig(9, 2.4)
+        # 底部彩色分区（号码段背景）
+        for ylo, yhi, c in [(0,12,'#FF6B6B'),(12,24,'#F39C12'),(24,36,'#00C9FF'),(36,49,'#27AE60')]:
+            ax_t.axhspan(ylo, yhi, color=c, alpha=0.04)
+        # 高亮最近10期区间
+        ax_t.axvspan(lookback - 10 - 0.5, lookback - 0.5, color=PALETTE['blue'], alpha=0.07)
+        # 折线
+        ax_t.plot(xs, recent_vals, color=PALETTE['blue'], lw=1.8, alpha=0.85, zorder=3)
+        ax_t.scatter(xs[:-10], recent_vals[:-10],
+                     s=14, color=PALETTE['grey'], zorder=4, alpha=0.55)
+        ax_t.scatter(xs[-10:], recent_vals[-10:],
+                     s=24, color=PALETTE['blue'], zorder=5, alpha=0.9)
+        # 大小分界线
+        ax_t.axhline(24.5, color=PALETTE['grey'], lw=0.9, ls='--', alpha=0.45)
+        ax_t.text(0.5, 24.8, '大/小分界', transform=ax_t.get_yaxis_transform(),
+                  fontsize=7, color=PALETTE['grey'], alpha=0.6)
+        # 标注最近10期数值
+        for i, v in enumerate(recent_vals[-10:]):
+            xi = lookback - 10 + i
+            offset = 6 if i % 2 == 0 else -12
+            ax_t.annotate(f'{int(v)}', (xi, v),
+                          textcoords='offset points', xytext=(0, offset),
+                          fontsize=7.5, color='#E0E6ED', ha='center', alpha=0.92,
+                          fontweight='bold')
+        ax_t.set_xlim(-0.5, lookback - 0.5)
+        ax_t.set_ylim(0, 51)
+        ax_t.set_yticks([1, 12, 24, 36, 49])
+        ax_t.set_xticks([])
+        ax_t.set_title(f'近 {lookback} 期特码走势  ▏蓝色阴影 = 最近 10 期', fontsize=9, pad=6)
+        ax_t.grid(axis='y', alpha=0.18)
+        fig_t.tight_layout(pad=0.4)
+        st.image(fig_to_b64(fig_t), use_container_width=True)
+        plt.close(fig_t)
+
+    with _tw2:
+        r10_odd  = sum(1 for x in r10_nums if x % 2 == 1)
+        r10_even = 10 - r10_odd
+        r10_big  = sum(1 for x in r10_nums if x > 24)
+        r10_sml  = 10 - r10_big
+        r10_mean = float(np.mean(r10_nums))
+        r10_sum  = sum(r10_nums)
+        r10_max  = max(r10_nums)
+        r10_min  = min(r10_nums)
+
+        mini_items = [
+            ('奇偶比', f'{r10_odd} : {r10_even}', '#00C9FF',
+             f'奇 {r10_odd*10}% / 偶 {r10_even*10}%'),
+            ('大小比', f'{r10_big} : {r10_sml}',  '#F39C12',
+             f'大(>24) {r10_big*10}% / 小 {r10_sml*10}%'),
+            ('区间均值', f'{r10_mean:.1f}',         '#27AE60',
+             f'全局均值 25.0'),
+            ('极差',   f'{r10_max}–{r10_min}',    '#9B59B6',
+             f'范围跨度 {r10_max - r10_min}'),
+        ]
+        for label, value, color, sub in mini_items:
+            st.markdown(f'''
+            <div style="background:rgba(255,255,255,.04);border-left:3px solid {color};
+                 border-radius:6px;padding:8px 12px;margin-bottom:8px">
+              <div style="font-size:9px;color:rgba(224,230,237,.4);text-transform:uppercase;
+                   letter-spacing:.7px;margin-bottom:2px">{label}</div>
+              <div style="font-size:17px;font-weight:700;color:{color};line-height:1.1">{value}</div>
+              <div style="font-size:9px;color:rgba(224,230,237,.28);margin-top:3px">{sub}</div>
+            </div>''', unsafe_allow_html=True)
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -1982,6 +2090,18 @@ with tab3:
     if not zodiac_cnt:
         st.warning('数据中无 zodiac 生肖字段，请确认 CSV 包含该列')
     else:
+        # ── 生肖筛选控件（内联）─────────────────────────────────────────
+        _zt1, _zt2 = st.columns([2, 2])
+        with _zt1:
+            display_mode = st.radio('🐲 展示模式', ['全部12肖', 'Top 5', '单生肖'],
+                                     horizontal=True, label_visibility='visible')
+        with _zt2:
+            sel_zodiac = None
+            if display_mode == '单生肖':
+                sel_zodiac = st.selectbox('选择生肖', ZODIAC_ORDER,
+                                           label_visibility='collapsed')
+        st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
+
         # 按展示模式过滤
         if display_mode == 'Top 5':
             top5_z  = sorted(zodiac_cnt, key=zodiac_cnt.get, reverse=True)[:5]
