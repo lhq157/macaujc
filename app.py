@@ -310,6 +310,7 @@ def fetch_data():
 # 3. 核心计算函数
 # ══════════════════════════════════════════════════════════════════════════
 
+@st.cache_data(show_spinner=False)
 def compute_freq(specials: np.ndarray):
     """计算 1-49 各号码频次，返回 (freq_arr[49], avg_freq)"""
     cnt  = Counter(specials.tolist())
@@ -317,6 +318,7 @@ def compute_freq(specials: np.ndarray):
     return freq, len(specials) / 49
 
 
+@st.cache_data(show_spinner=False)
 def compute_gaps(specials: np.ndarray):
     """计算各号码当前遗漏及全量历史间隔，返回 (gap_arr[49], all_gaps)"""
     n        = len(specials)
@@ -331,6 +333,7 @@ def compute_gaps(specials: np.ndarray):
     return gap_arr, np.array(all_gaps, dtype=float)
 
 
+@st.cache_data(show_spinner=False)
 def compute_autocorr(specials: np.ndarray, lags: int = 20) -> np.ndarray:
     """计算序列样本自相关系数（lags 1..lags），去均值标准化"""
     x   = specials.astype(float)
@@ -844,6 +847,100 @@ def fig_chi2_vs_window(window_sizes: list, chi2_vals: list,
     ax2.grid(axis='y', alpha=0.15)
     fig.suptitle('卡方检验统计量随窗口大小的变化（使用最近 N 期数据）',
                  fontsize=10, color='#E0E6ED', y=1.01)
+    fig.tight_layout()
+    return fig
+
+
+def fig_number_timeline(specials: np.ndarray, num: int,
+                        lookback: int = 300) -> plt.Figure:
+    """号码历史出现时间线：近 lookback 期内每次出现标一个点"""
+    recent   = specials[-lookback:] if len(specials) > lookback else specials
+    total    = len(recent)
+    appeared = np.where(recent == num)[0]
+    gaps_num = np.diff(appeared).tolist() if len(appeared) > 1 else []
+
+    fig, (ax_tl, ax_gap) = plt.subplots(2, 1, figsize=(13, 4),
+                                         gridspec_kw={'height_ratios': [1, 2]})
+    fig.patch.set_facecolor(PALETTE['bg'])
+    for ax in (ax_tl, ax_gap):
+        ax.set_facecolor(PALETTE['bg'])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color('#2A3F54')
+        ax.spines['bottom'].set_color('#2A3F54')
+        ax.tick_params(colors='#A0AEC0', labelsize=8)
+
+    # ── 上图：时间线条带
+    ax_tl.fill_between([0, total], [-0.3, -0.3], [0.3, 0.3],
+                        color='#2A3F54', alpha=0.4, zorder=1)
+    if len(appeared) > 0:
+        ax_tl.vlines(appeared, -0.28, 0.28, color=PALETTE['blue'],
+                     linewidth=1.6, alpha=0.75, zorder=2)
+        ax_tl.scatter([appeared[-1]], [0], s=100, color=PALETTE['red'],
+                      zorder=4, label=f'最近：第{total - appeared[-1]}期前')
+    ax_tl.set_xlim(-2, total + 2)
+    ax_tl.set_ylim(-0.5, 0.5)
+    ax_tl.set_yticks([])
+    ax_tl.set_xlabel('')
+    ax_tl.set_title(
+        f'No.{num:02d} 出现时间线（近{total}期，共出现 {len(appeared)} 次）',
+        fontsize=10, pad=6, color='#E0E6ED')
+    if len(appeared) > 0:
+        ax_tl.legend(fontsize=8, loc='upper left', framealpha=0.1,
+                     labelcolor='#E0E6ED', facecolor=PALETTE['bg'])
+
+    # ── 下图：间隔分布直方图
+    if gaps_num:
+        ax_gap.hist(gaps_num, bins=min(30, len(set(gaps_num))),
+                    color=PALETTE['blue'], alpha=0.75, zorder=2)
+        mean_g = float(np.mean(gaps_num))
+        ax_gap.axvline(mean_g, color=PALETTE['orange'], linewidth=1.4,
+                       linestyle='--', label=f'均值 {mean_g:.1f}')
+        ax_gap.axvline(avg_freq, color='#A29BFE', linewidth=1.2,
+                       linestyle=':', label=f'理论 {avg_freq:.1f}')
+        ax_gap.legend(fontsize=8, framealpha=0.1,
+                      labelcolor='#E0E6ED', facecolor=PALETTE['bg'])
+    else:
+        ax_gap.text(0.5, 0.5, '间隔数据不足', transform=ax_gap.transAxes,
+                    ha='center', va='center', color='#A0AEC0')
+    ax_gap.set_xlabel('出现间隔（期）', fontsize=9)
+    ax_gap.set_ylabel('频数', fontsize=9)
+    ax_gap.set_title(f'No.{num:02d} 历史出现间隔分布', fontsize=9, pad=4, color='#E0E6ED')
+    ax_gap.grid(axis='y', alpha=0.15)
+
+    fig.tight_layout(pad=1.2)
+    return fig
+
+
+def fig_dual_window_compare(specials: np.ndarray,
+                             a_start: int, a_size: int,
+                             b_start: int, b_size: int) -> plt.Figure:
+    """双时段每期发生率对比柱状图（归一化到每期发生率）"""
+    win_a  = specials[a_start:a_start + a_size]
+    win_b  = specials[b_start:b_start + b_size]
+    rate_a = np.array([Counter(win_a.tolist()).get(i, 0) / max(a_size, 1)
+                       for i in range(1, 50)])
+    rate_b = np.array([Counter(win_b.tolist()).get(i, 0) / max(b_size, 1)
+                       for i in range(1, 50)])
+    exp_r  = 1.0 / 49.0
+    x = np.arange(1, 50)
+    w = 0.38
+    fig, ax = _fig(14, 4.5)
+    ax.bar(x - w / 2, rate_a, w, color=PALETTE['blue'],
+           alpha=0.82, label='时段 A', zorder=2)
+    ax.bar(x + w / 2, rate_b, w, color=PALETTE['orange'],
+           alpha=0.82, label='时段 B', zorder=2)
+    ax.axhline(exp_r, color='rgba(255,255,255,0.28)', linewidth=1.2,
+               linestyle='--', label=f'期望 {exp_r:.4f}', zorder=3)
+    ax.set_xlabel('号码', fontsize=9)
+    ax.set_ylabel('每期发生率', fontsize=9)
+    ax.set_title('双时段频率对比（蓝=时段 A，橙=时段 B，虚线=期望值）',
+                 fontsize=10, pad=8)
+    ax.set_xticks(range(1, 50))
+    ax.tick_params(axis='x', labelsize=6)
+    ax.legend(fontsize=9, framealpha=0.1,
+              labelcolor='#E0E6ED', facecolor=PALETTE['bg'])
+    ax.grid(axis='y', alpha=0.18)
     fig.tight_layout()
     return fig
 
@@ -1654,6 +1751,108 @@ with tab2:
             unsafe_allow_html=True
         )
 
+    st.markdown('<br>', unsafe_allow_html=True)
+
+    # ── 🔍 单号码深度档案 ─────────────────────────────────────────────────
+    st.markdown(ch('🔍 单号码深度档案',
+                   '选择任意号码（1–49），一键查看其完整历史统计数据与出现时间线',
+                   '🗂️'), unsafe_allow_html=True)
+
+    col_np, col_nd = st.columns([1, 3])
+    with col_np:
+        probe_num = st.number_input(
+            '查询号码', min_value=1, max_value=49, value=1, step=1,
+            key='probe_num',
+            help='输入 1–49 任意号码，右侧实时显示完整档案',
+        )
+        pn = int(probe_num)
+        pn_freq  = int(freq_arr[pn - 1])
+        pn_gap   = int(gap_arr[pn - 1])
+        pn_exp   = avg_freq
+        pn_delta = pn_freq - pn_exp
+        pn_rank  = int(np.sum(freq_arr > pn_freq)) + 1   # 频次排名（1=最高）
+        pn_rank_cold = int(np.sum(gap_arr > pn_gap)) + 1  # 遗漏排名（1=遗漏最长）
+
+        # 生肖/奇偶/大小
+        pn_odd  = '奇' if pn % 2 == 1 else '偶'
+        pn_size = f'大（>{config.BIG_NUMBER_THRESHOLD}）' if pn > config.BIG_NUMBER_THRESHOLD else f'小（≤{config.BIG_NUMBER_THRESHOLD}）'
+        pn_tail = pn % 10
+        pn_zodiac = ''
+        if 'zodiac' in df_full.columns:
+            rows_z = df_full[df_full['special'] == pn]['zodiac'].dropna()
+            pn_zodiac = rows_z.iloc[-1] if len(rows_z) > 0 else '—'
+
+        # 历史间隔统计
+        pn_idx   = np.where(specials == pn)[0]
+        pn_gaps_h = np.diff(pn_idx).tolist() if len(pn_idx) > 1 else []
+        pn_max_gap  = int(max(pn_gaps_h)) if pn_gaps_h else 0
+        pn_avg_gap  = float(np.mean(pn_gaps_h)) if pn_gaps_h else 0.0
+        pn_last_date = (df_full[df_full['special'] == pn]['openTime'].max()
+                        .strftime('%Y/%m/%d') if len(pn_idx) > 0 else '—')
+
+        delta_color = '#FF6B6B' if pn_delta > 0 else ('#74B9FF' if pn_delta < 0 else '#A0AEC0')
+        gap_color   = '#E74C3C' if pn_gap >= crit_thr else ('#F39C12' if pn_gap >= warn_thr else '#27AE60')
+
+        st.markdown(f"""
+        <div style="background:#1A2634;border:1px solid rgba(0,201,255,0.15);
+                    border-radius:12px;padding:16px 18px;font-size:13px">
+          <div style="font-size:28px;font-weight:700;color:#00C9FF;
+                      border-bottom:1px solid rgba(0,201,255,0.15);
+                      padding-bottom:10px;margin-bottom:12px">
+            No.{pn:02d}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <div style="color:rgba(224,230,237,0.42);font-size:10px;letter-spacing:.5px">总出现次数</div>
+              <div style="font-weight:700;font-size:16px;margin-top:2px">{pn_freq}次</div>
+            </div>
+            <div>
+              <div style="color:rgba(224,230,237,0.42);font-size:10px;letter-spacing:.5px">vs 理论均值</div>
+              <div style="font-weight:700;font-size:16px;margin-top:2px;color:{delta_color}">{pn_delta:+.1f}</div>
+            </div>
+            <div>
+              <div style="color:rgba(224,230,237,0.42);font-size:10px;letter-spacing:.5px">当前遗漏</div>
+              <div style="font-weight:700;font-size:16px;margin-top:2px;color:{gap_color}">{pn_gap}期</div>
+            </div>
+            <div>
+              <div style="color:rgba(224,230,237,0.42);font-size:10px;letter-spacing:.5px">最长历史遗漏</div>
+              <div style="font-weight:700;font-size:16px;margin-top:2px">{pn_max_gap}期</div>
+            </div>
+            <div>
+              <div style="color:rgba(224,230,237,0.42);font-size:10px;letter-spacing:.5px">频次排名</div>
+              <div style="font-weight:700;font-size:16px;margin-top:2px">#{pn_rank}/49</div>
+            </div>
+            <div>
+              <div style="color:rgba(224,230,237,0.42);font-size:10px;letter-spacing:.5px">平均间隔</div>
+              <div style="font-weight:700;font-size:16px;margin-top:2px">{pn_avg_gap:.1f}期</div>
+            </div>
+          </div>
+          <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.05);
+                      padding-top:10px;font-size:12px;color:rgba(224,230,237,0.6);
+                      line-height:1.9">
+            <span style="color:rgba(224,230,237,0.38)">生肖</span> {ZODIAC_EMOJI.get(pn_zodiac,'')}{pn_zodiac} &nbsp;
+            <span style="color:rgba(224,230,237,0.38)">奇偶</span> {pn_odd} &nbsp;
+            <span style="color:rgba(224,230,237,0.38)">大小</span> {pn_size}<br>
+            <span style="color:rgba(224,230,237,0.38)">尾数</span> {pn_tail} &nbsp;
+            <span style="color:rgba(224,230,237,0.38)">末次出现</span> {pn_last_date}
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_nd:
+        st.pyplot(fig_number_timeline(specials, pn, lookback=300),
+                  use_container_width=True)
+        plt.close('all')
+        st.markdown(
+            ib(f'No.{pn:02d} 在全量 {n} 期中共出现 <strong>{pn_freq}</strong> 次，'
+               f'理论均值 {pn_exp:.1f} 次，偏差 <strong style="color:{delta_color}">{pn_delta:+.1f}</strong>。'
+               f'当前遗漏 <strong>{pn_gap}</strong> 期'
+               + (f'（预警 {warn_thr:.0f}）' if pn_gap >= warn_thr else '') + '。'
+               '遗漏长短对独立随机事件无预测价值，不应据此选号。',
+               'blue' if pn_gap < warn_thr else 'orange'),
+            unsafe_allow_html=True
+        )
+
 
 # ────────────────────────────────────────────────────────────────────────
 # Tab 3 — 结构分析
@@ -1920,6 +2119,86 @@ with tab4:
     plt.close('all')
     st.markdown(
         ib('热力图中任何局部红/蓝区块均为随机波动，不存在统计意义上的"号码周期"或"冷热轮换"规律。',
+           'orange'),
+        unsafe_allow_html=True
+    )
+
+    st.markdown('<br>', unsafe_allow_html=True)
+
+    # ── ⚖️ 双时段频率对比 ────────────────────────────────────────────────
+    st.markdown(ch('⚖️ 双时段频率对比',
+                   '独立设置两个时间窗口（A / B），对比各号码在两个时段内的每期发生率差异',
+                   '🆚'), unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="display:flex;gap:8px;margin-bottom:4px">
+      <div style="width:14px;height:14px;background:#00C9FF;border-radius:3px;margin-top:2px"></div>
+      <span style="font-size:12px;color:rgba(224,230,237,0.6)">时段 A（蓝色）</span>
+      <div style="width:14px;height:14px;background:#F39C12;border-radius:3px;margin-top:2px;margin-left:12px"></div>
+      <span style="font-size:12px;color:rgba(224,230,237,0.6)">时段 B（橙色）</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_dwa, col_dwb = st.columns(2)
+    _dw_max = min(n, 500)
+    with col_dwa:
+        st.markdown('<div style="color:#00C9FF;font-size:12px;font-weight:600;'
+                    'margin-bottom:4px">🔵 时段 A</div>', unsafe_allow_html=True)
+        dw_a_size = st.slider('A 窗口大小', 20, _dw_max, min(100, _dw_max),
+                               step=10, key='dw_a_size')
+        dw_a_end  = st.slider('A 末尾位置', dw_a_size, n, n,
+                               step=1, key='dw_a_end',
+                               help='右端=最新，向左拖动选取历史窗口')
+    with col_dwb:
+        st.markdown('<div style="color:#F39C12;font-size:12px;font-weight:600;'
+                    'margin-bottom:4px">🟠 时段 B</div>', unsafe_allow_html=True)
+        dw_b_size = st.slider('B 窗口大小', 20, _dw_max, min(100, _dw_max),
+                               step=10, key='dw_b_size')
+        dw_b_end  = st.slider('B 末尾位置', dw_b_size, n, max(dw_b_size, n - min(100, n // 2)),
+                               step=1, key='dw_b_end',
+                               help='默认偏早，可拖到任意位置与 A 对比')
+
+    dw_a_start = dw_a_end - dw_a_size
+    dw_b_start = dw_b_end - dw_b_size
+
+    # 摘要信息行
+    _wa_sp = specials[dw_a_start:dw_a_end]
+    _wb_sp = specials[dw_b_start:dw_b_end]
+    _rate_a = np.array([Counter(_wa_sp.tolist()).get(i, 0) / max(dw_a_size, 1) for i in range(1, 50)])
+    _rate_b = np.array([Counter(_wb_sp.tolist()).get(i, 0) / max(dw_b_size, 1) for i in range(1, 50)])
+    _top_a  = int(np.argmax(_rate_a)) + 1
+    _top_b  = int(np.argmax(_rate_b)) + 1
+    _diff   = _rate_a - _rate_b
+    _most_diff = int(np.argmax(np.abs(_diff))) + 1
+
+    col_di1, col_di2, col_di3 = st.columns(3)
+    def _mini_kpi(col, val, lbl, color='#00C9FF'):
+        with col:
+            st.markdown(f"""
+            <div style="background:#1A2634;border:1px solid rgba(255,255,255,0.07);
+                        border-radius:8px;padding:10px 14px;text-align:center">
+              <div style="font-size:16px;font-weight:700;color:{color}">{val}</div>
+              <div style="font-size:10px;color:rgba(224,230,237,0.4);
+                          margin-top:3px;text-transform:uppercase;letter-spacing:.4px">{lbl}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    _mini_kpi(col_di1, f'第{dw_a_start+1}–{dw_a_end}期 | No.{_top_a}最热',
+              f'时段 A（{dw_a_size}期）', '#00C9FF')
+    _mini_kpi(col_di2, f'第{dw_b_start+1}–{dw_b_end}期 | No.{_top_b}最热',
+              f'时段 B（{dw_b_size}期）', '#F39C12')
+    _mini_kpi(col_di3, f'No.{_most_diff}差异最大',
+              '两时段发生率差异最大号码', '#A29BFE')
+
+    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+    st.pyplot(
+        fig_dual_window_compare(specials, dw_a_start, dw_a_size, dw_b_start, dw_b_size),
+        use_container_width=True
+    )
+    plt.close('all')
+    st.markdown(
+        ib(f'时段 A（第{dw_a_start+1}–{dw_a_end}期）vs 时段 B（第{dw_b_start+1}–{dw_b_end}期）。'
+           '两时段差异源于随机波动，不代表号码分布发生了真实变化。'
+           '如需统计检验，可使用 Tab 5 的卡方窗口敏感性分析。',
            'orange'),
         unsafe_allow_html=True
     )
